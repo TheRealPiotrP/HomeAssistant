@@ -1,0 +1,220 @@
+blueprint:
+  name: Zooz ZEN35 → PowerView (Area + Labels)
+  description: >
+    Auto-configure ZEN35 switches to control Hunter Douglas PowerView blinds
+    via scenes. Uses area + labels for zero manual entity selection.
+    Big button controls load; Buttons 1–3 activate scenes (fully open,
+    partially open, fully close); Button 4 toggles central-control mode.
+    LEDs: active scene button stays on, others off. Assign labels, put ZEN35
+    and entities in the same area, and the blueprint discovers them.
+  domain: automation
+
+  input:
+    zen35_device:
+      name: ZEN35 Switch
+      description: Select the Zooz ZEN35 in the room with the blinds.
+      selector:
+        device:
+          integration: zwave_js
+          manufacturer: Zooz
+
+    label_fully_open:
+      name: Label for "fully open" scenes
+      description: Label ID you attach to PowerView scenes that fully open shades.
+      default: powerview_fully_open
+      selector:
+        text:
+
+    label_partially_open:
+      name: Label for "partially open" scenes
+      description: Label ID for scenes that partially open shades.
+      default: powerview_partially_open
+      selector:
+        text:
+
+    label_fully_close:
+      name: Label for "fully close" scenes
+      description: Label ID for scenes that fully close shades.
+      default: powerview_fully_close
+      selector:
+        text:
+
+    label_central_control:
+      name: Label for central-control input_boolean
+      description: Label ID for the helper that enables central blinds automation.
+      default: blinds_central_control
+      selector:
+        text:
+
+mode: single
+max_exceeded: silent
+
+variables:
+  device_id: !input zen35_device
+  label_fully_open: !input label_fully_open
+  label_partially_open: !input label_partially_open
+  label_fully_close: !input label_fully_close
+  label_central_control: !input label_central_control
+
+trigger:
+  - platform: event
+    event_type: zwave_js_value_notification
+    event_data:
+      command_class_name: Central Scene
+      device_id: !input zen35_device
+
+action:
+  - variables:
+      scene_id: "{{ trigger.event.data.label }}"
+      scene_value: "{{ trigger.event.data.value }}"
+      area_id: "{{ device_attr(device_id, 'area_id') }}"
+      # Entities in this area with each label (only when area exists)
+      entities_fully_open: >
+        {% set aid = device_attr(device_id, 'area_id') %}
+        {{ (label_entities(label_fully_open) | select('in', area_entities(aid)) | list) if aid else [] }}
+      entities_partially_open: >
+        {% set aid = device_attr(device_id, 'area_id') %}
+        {{ (label_entities(label_partially_open) | select('in', area_entities(aid)) | list) if aid else [] }}
+      entities_fully_close: >
+        {% set aid = device_attr(device_id, 'area_id') %}
+        {{ (label_entities(label_fully_close) | select('in', area_entities(aid)) | list) if aid else [] }}
+      entities_central_control: >
+        {% set aid = device_attr(device_id, 'area_id') %}
+        {{ (label_entities(label_central_control) | select('in', area_entities(aid)) | select('search', 'input_boolean.') | list) if aid else [] }}
+
+  - choose:
+      # Button 1 (Scene 001) – Fully open
+      - conditions:
+          - "{{ scene_id == 'Scene 001' }}"
+          - "{{ scene_value == 'KeyPressed' }}"
+          - "{{ entities_fully_open | length > 0 }}"
+        sequence:
+          - service: scene.turn_on
+            target:
+              entity_id: "{{ entities_fully_open }}"
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 2
+              value: 3
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 3
+              value: 2
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 4
+              value: 2
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 5
+              value: 2
+
+      # Button 2 (Scene 002) – Partially open
+      - conditions:
+          - "{{ scene_id == 'Scene 002' }}"
+          - "{{ scene_value == 'KeyPressed' }}"
+          - "{{ entities_partially_open | length > 0 }}"
+        sequence:
+          - service: scene.turn_on
+            target:
+              entity_id: "{{ entities_partially_open }}"
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 2
+              value: 2
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 3
+              value: 3
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 4
+              value: 2
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 5
+              value: 2
+
+      # Button 3 (Scene 003) – Fully close
+      - conditions:
+          - "{{ scene_id == 'Scene 003' }}"
+          - "{{ scene_value == 'KeyPressed' }}"
+          - "{{ entities_fully_close | length > 0 }}"
+        sequence:
+          - service: scene.turn_on
+            target:
+              entity_id: "{{ entities_fully_close }}"
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 2
+              value: 2
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 3
+              value: 2
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 4
+              value: 3
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 5
+              value: 2
+
+      # Button 4 (Scene 004) – Toggle central control
+      - conditions:
+          - "{{ scene_id == 'Scene 004' }}"
+          - "{{ scene_value == 'KeyPressed' }}"
+          - "{{ entities_central_control | length > 0 }}"
+        sequence:
+          - service: input_boolean.toggle
+            target:
+              entity_id: "{{ entities_central_control }}"
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 2
+              value: 2
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 3
+              value: 2
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 4
+              value: 2
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 5
+              value: "{{ 3 if states(entities_central_control | first) == 'on' else 2 }}"
