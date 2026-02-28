@@ -1,5 +1,5 @@
 blueprint:
-  name: Zooz ZEN35 → PowerView (Area + Labels)
+  name: Zooz ZEN35 → PowerView (Auto-Configuring)
   description: >
     Auto-configure ZEN35 switches to control Hunter Douglas PowerView blinds
     via scenes. Uses area + labels for zero manual entity selection.
@@ -21,28 +21,28 @@ blueprint:
     label_fully_open:
       name: Label for "fully open" scenes
       description: Label ID you attach to PowerView scenes that fully open shades.
-      default: powerview_fully_open
+      default: powerview.scenes.open
       selector:
         text:
 
     label_partially_open:
       name: Label for "partially open" scenes
       description: Label ID for scenes that partially open shades.
-      default: powerview_partially_open
+      default: powerview.scenes.partially_open
       selector:
         text:
 
     label_fully_close:
       name: Label for "fully close" scenes
       description: Label ID for scenes that fully close shades.
-      default: powerview_fully_close
+      default: powerview.scenes.closed
       selector:
         text:
 
     label_central_control:
       name: Label for central-control input_boolean
       description: Label ID for the helper that enables central blinds automation.
-      default: blinds_central_control
+      default: powerview.automated
       selector:
         text:
 

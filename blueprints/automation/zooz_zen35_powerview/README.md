@@ -18,10 +18,10 @@ Automatically map Zooz ZEN35 switches to Hunter Douglas PowerView blind scenes u
 
 In **Settings → Labels**, create (or reuse) these labels (IDs must match what you use in the blueprint):
 
-- `powerview_fully_open` — scenes that fully open shades
-- `powerview_partially_open` — scenes that partially open shades (e.g. 50%)
-- `powerview_fully_close` — scenes that fully close shades
-- `blinds_central_control` — input_boolean that enables your central blinds automation
+- `powerview.scenes.open` — scenes that fully open shades
+- `powerview.scenes.partially_open` — scenes that partially open shades (e.g. 50%)
+- `powerview.scenes.closed` — scenes that fully close shades
+- `powerview.automated` — input_boolean that enables your central blinds automation
 
 ### 2. Assign labels to scenes and helpers
 
