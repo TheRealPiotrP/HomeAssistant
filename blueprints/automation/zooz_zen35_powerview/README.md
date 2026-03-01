@@ -44,3 +44,14 @@ In **Settings → Labels**, create (or reuse) these labels (IDs must match what 
 ### 5. Central-control automation
 
 Create a separate automation that triggers when `input_boolean.living_room_blinds_central` (or similar) is turned on, and runs your central blinds logic. Button 4 on the ZEN35 toggles that helper.
+
+## Testing
+
+From the repo root, install test deps and run pytest:
+
+```bash
+pip install -r requirements-test.txt
+pytest tests/ -v
+```
+
+Tests fire `zwave_js_value_notification` events and assert on `scene.turn_on`, `input_boolean.toggle`, and `zwave_js.set_config_parameter` calls.

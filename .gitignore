@@ -1,0 +1,21 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env
+
+# Editor directories
+.vscode/
+.idea/
+
+# pytest cache
+.pytest_cache/
+
+# Home Assistant specific
+.homeassistant
+
+# Misc
+*.egg-info/

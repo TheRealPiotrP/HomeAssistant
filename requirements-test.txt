@@ -1,0 +1,5 @@
+# Test dependencies for ZEN35 PowerView blueprint tests
+# Install: pip install -r requirements-test.txt
+pytest>=7.0
+pytest-asyncio>=0.21.0
+pytest-homeassistant-custom-component>=0.13.316
