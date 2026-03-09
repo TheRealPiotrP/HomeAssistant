@@ -122,8 +122,8 @@ async def test_scene_button_activates_scene_and_sets_leds(
 
 @pytest.mark.parametrize(
     "initial_state, expected_led",
-    [("off", LEDState.ON), ("on", LEDState.OFF)],
-    ids=["button4-was_off-LED4_on", "button4-was_on-LED4_off"],
+    [("off", LEDState.OFF), ("on", LEDState.ON)],
+    ids=["button4-was_off-LED4_off", "button4-was_on-LED4_on"],
 )
 async def test_button4_toggles_central_control_and_updates_led(
     hass,

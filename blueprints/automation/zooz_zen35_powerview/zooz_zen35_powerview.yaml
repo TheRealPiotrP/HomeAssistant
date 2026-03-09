@@ -352,7 +352,7 @@ action:
             data:
               parameter: 5
               value: >
-                {{ 3 if (states(entities_central_control | first) == 'on' or confirm_timeout > 0) else 2 }}
+                {{ 2 if (confirm_timeout == 0 and states(entities_central_control | first) == 'on') else 3 }}
           - if: "{{ confirm_timeout > 0 }}"
             then:
               - delay:
