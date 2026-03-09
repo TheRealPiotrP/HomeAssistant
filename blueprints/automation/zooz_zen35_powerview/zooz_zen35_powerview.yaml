@@ -15,8 +15,10 @@ blueprint:
       description: Select the Zooz ZEN35 in the room with the blinds.
       selector:
         device:
-          integration: zwave_js
-          manufacturer: Zooz
+          filter:
+            - integration: zwave_js
+              manufacturer: Zooz
+              model: ZEN35
 
     label_fully_open:
       name: Label for "fully open" scenes
