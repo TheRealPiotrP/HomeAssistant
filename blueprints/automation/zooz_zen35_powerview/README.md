@@ -17,11 +17,11 @@ Automatically map Zooz ZEN35 switches to Hunter Douglas PowerView blind scenes u
 
 | Button | Action |
 |--------|--------|
-| **Dimmer** | Controls the physical load (light/fan). Not handled by this blueprint. |
+| **Dimmer** | Controls the physical load (light/fan). In confirm mode, pressing it flashes the load LED briefly. |
 | **Button 1** | Activate "fully open" PowerView scenes |
 | **Button 2** | Activate "partially open" PowerView scenes |
 | **Button 3** | Activate "fully close" PowerView scenes |
-| **Button 4** | Toggle central-control mode (input_boolean) |
+| **Button 4** | Opt out of central control — toggles an `input_boolean`; **red = opted out** |
 
 ## LED indicators
 
@@ -46,13 +46,13 @@ Colors are applied to the device on HA startup and whenever the automation is sa
 | **Default** | ⚪ white | ⚪ white | ⚪ white | ⚪ white | 🔴 red |
 | **Rainbow** | 🩵 cyan | 🔵 blue | 🟢 green | 🟡 yellow | 🔴 red |
 
-The load LED uses its default HA behavior (mode 0): on when the load is off, off when it is on. The blueprint only sets its color — it never overrides the mode.
+The load LED normally uses its default HA behavior (mode 0): on when the load is off, off when it is on. The blueprint only sets its color — it never overrides the mode. Exception: in confirm mode, pressing the dimmer button briefly overrides the load LED to always-on for `confirm_timeout` seconds, then turns it off.
 
 ### Persistent mode (`confirm_timeout = 0`, default)
 
 The active LED stays lit until a different button is pressed.
 
-**Example — scene 2 active, central control on:**
+**Example — scene 2 active, opted out of central control:**
 
 ```
 ┌─────────────────────┐
@@ -61,14 +61,28 @@ The active LED stays lit until a different button is pressed.
 ├──────────┬──────────┤
 │   ⬛  1  │   ⚪  2  │  ← scene 2 active
 ├──────────┼──────────┤
-│   ⬛  3  │   🔴  4  │  ← central control on
+│   ⬛  3  │   🔴  4  │  ← opted out (central control off)
+└──────────┴──────────┘
+```
+
+**Example — scene 2 active, central control on (opted in):**
+
+```
+┌─────────────────────┐
+│   dimmer  (load)    │
+│         ⚪          │  ← on when load is off (locator behavior)
+├──────────┬──────────┤
+│   ⬛  1  │   ⚪  2  │  ← scene 2 active
+├──────────┼──────────┤
+│   ⬛  3  │   ⬛  4  │  ← opted in (central control on, LED4 dark)
 └──────────┴──────────┘
 ```
 
 ### Confirm mode (`confirm_timeout > 0`)
 
 The active LED lights up briefly to acknowledge the press, then turns off.
-Button 4 blinks **white** when toggling on, **red** when toggling off.
+Button 4 blinks **white** when opting in (central control turning on), **red** when opting out (central control turning off).
+The dimmer/load button also flashes its LED briefly in this mode.
 
 **Immediately after pressing button 2:**
 

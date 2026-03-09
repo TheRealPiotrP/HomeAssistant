@@ -358,8 +358,9 @@ async def test_button4_no_matching_label_does_nothing(
         ("Scene 002", "input_boolean.blinds_partial_activated"),
         ("Scene 003", "input_boolean.blinds_closed_activated"),
         ("Scene 004", "input_boolean.living_room_blinds_central"),
+        ("Scene 005", None),
     ],
-    ids=["button1-no_area", "button2-no_area", "button3-no_area", "button4-no_area"],
+    ids=["button1-no_area", "button2-no_area", "button3-no_area", "button4-no_area", "load-no_area"],
 )
 async def test_button_does_nothing_when_device_has_no_area(
     hass,
@@ -371,9 +372,10 @@ async def test_button_does_nothing_when_device_has_no_area(
 ):
     """All buttons are no-ops when the ZEN35 device has no area assigned.
 
-    The blueprint guards every entity list with `if aid else []`, so removing
-    the device's area must prevent any scene activation, boolean toggle, or
-    LED update.
+    Buttons 1–4 are gated on entity discovery via area, so removing the
+    device's area prevents scene activation, boolean toggle, and LED updates.
+    The load button (Scene 005) is tested in persistent mode (confirm_timeout=0)
+    where it is always a no-op regardless of area.
     """
     topology = hass_topology
 
@@ -383,8 +385,9 @@ async def test_button_does_nothing_when_device_has_no_area(
     _fire_button(hass, topology.device.id, scene_label)
     await hass.async_block_till_done()
 
-    assert hass.states.get(target).state == "off", \
-        f"{scene_label}: target must stay 'off' when device has no area"
+    if target is not None:
+        assert hass.states.get(target).state == "off", \
+            f"{scene_label}: target must stay 'off' when device has no area"
     assert len(zwave_calls) == 0, \
         f"{scene_label}: no zwave calls expected when device has no area"
 
