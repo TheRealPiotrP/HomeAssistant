@@ -50,8 +50,10 @@ Create a separate automation that triggers when `input_boolean.living_room_blind
 From the repo root, install test deps and run pytest:
 
 ```bash
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements-test.txt
-pytest tests/ -v
+pytest -v
 ```
 
-Tests fire `zwave_js_value_notification` events and assert on `scene.turn_on`, `input_boolean.toggle`, and `zwave_js.set_config_parameter` calls.
+Tests fire `zwave_js_value_notification` events into a real Home Assistant instance and verify actual state changes — scenes activate, the central-control `input_boolean` toggles, and `zwave_js.set_config_parameter` calls are captured to verify LED parameter values.

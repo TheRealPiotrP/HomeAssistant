@@ -24,5 +24,5 @@ pip install -r requirements-test.txt
 
 ```bash
 source venv/bin/activate
-pytest tests/ -v
+pytest -v
 ```

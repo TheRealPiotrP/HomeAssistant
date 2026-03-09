@@ -110,12 +110,6 @@ action:
             data:
               parameter: 4
               value: 2
-          - service: zwave_js.set_config_parameter
-            target:
-              device_id: "{{ device_id }}"
-            data:
-              parameter: 5
-              value: 2
 
       # Button 2 (Scene 002) – Partially open
       - conditions:
@@ -143,12 +137,6 @@ action:
               device_id: "{{ device_id }}"
             data:
               parameter: 4
-              value: 2
-          - service: zwave_js.set_config_parameter
-            target:
-              device_id: "{{ device_id }}"
-            data:
-              parameter: 5
               value: 2
 
       # Button 3 (Scene 003) – Fully close
@@ -178,12 +166,6 @@ action:
             data:
               parameter: 4
               value: 3
-          - service: zwave_js.set_config_parameter
-            target:
-              device_id: "{{ device_id }}"
-            data:
-              parameter: 5
-              value: 2
 
       # Button 4 (Scene 004) – Toggle central control
       - conditions:

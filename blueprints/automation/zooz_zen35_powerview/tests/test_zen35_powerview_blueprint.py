@@ -123,8 +123,8 @@ async def test_button4_toggles_central_control_and_updates_led(
     Verified via real state changes:
     - input_boolean.living_room_blinds_central actually flips state
       (proving input_boolean.toggle ran against the real platform).
-    - zwave_js LED4 parameter is set to reflect the new state.
-    - LED1–3 are not touched.
+    - zwave_js LED4 parameter is set to reflect the new (post-toggle) state.
+    - LED1–3 are also reset to OFF.
     """
     topology = hass_topology
     switch = topology.entities.switch_auto
@@ -145,11 +145,14 @@ async def test_button4_toggles_central_control_and_updates_led(
     assert hass.states.get(switch).state == expected_new_state, \
         f"input_boolean should have toggled from '{initial_state}' to '{expected_new_state}'"
 
-    assert len(zwave_calls) == 1, \
-        f"Expected 1 zwave call (LED4 only), got {len(zwave_calls)}"
-    assert zwave_calls[0].data["parameter"] == ZEN35Param.LED4
-    assert zwave_calls[0].data["value"] == expected_led, \
+    assert len(zwave_calls) == 4, \
+        f"Expected 4 zwave calls (all LEDs), got {len(zwave_calls)}"
+    actual = {c.data["parameter"]: c.data["value"] for c in zwave_calls}
+    assert actual[ZEN35Param.LED4] == expected_led, \
         f"LED4: expected {expected_led} for initial state '{initial_state}'"
+    assert actual[ZEN35Param.LED1] == LEDState.OFF
+    assert actual[ZEN35Param.LED2] == LEDState.OFF
+    assert actual[ZEN35Param.LED3] == LEDState.OFF
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +168,7 @@ async def test_button4_toggles_central_control_and_updates_led(
     ],
     ids=["button1-no_open_label", "button2-no_partial_label", "button3-no_close_label"],
 )
-async def test_scene_button_no_matching_label_skips_scene_but_updates_leds(
+async def test_scene_button_no_matching_label_does_nothing(
     hass,
     hass_topology,
     load_blueprint,
@@ -175,11 +178,10 @@ async def test_scene_button_no_matching_label_skips_scene_but_updates_leds(
 ):
     """Buttons 1–3 with no scene carrying the expected label in the area.
 
-    The blueprint guards scene.turn_on behind an entity-list length check, so
-    only the LED update runs — the scene must not activate.
+    The whole button sequence (scene + LEDs) is gated on finding at least one
+    entity, so neither the scene nor any LED parameter should be updated.
     """
     topology = hass_topology
-    # Replace the relevant label with one that doesn't exist in the registry
     no_scene_labels = topology.labels._replace(
         open="no_such_label",
         partial="no_such_label",
@@ -190,13 +192,10 @@ async def test_scene_button_no_matching_label_skips_scene_but_updates_leds(
     _fire_button(hass, topology.device.id, scene_label)
     await hass.async_block_till_done()
 
-    # Scene must not have activated
     assert hass.states.get(target).state == "off", \
         f"{scene_label}: scene target must stay 'off' when no entity matches the label"
-
-    # LED parameters still updated (that block is not guarded by the entity check)
-    assert len(zwave_calls) == 3, \
-        f"{scene_label}: expected 3 LED zwave calls even with no matching scene, got {len(zwave_calls)}"
+    assert len(zwave_calls) == 0, \
+        f"{scene_label}: no zwave calls expected when no entity matches the label, got {len(zwave_calls)}"
 
 
 @pytest.mark.parametrize(
@@ -285,11 +284,11 @@ async def test_scene_buttons_do_not_affect_central_control(
     zwave_calls,
     scene_label,
 ):
-    """Pressing a scene button (1–3) must not touch the central-control state.
+    """Pressing a scene button (1–3) must not toggle the central-control boolean.
 
     Verified two ways:
     - The central-control input_boolean state is unchanged after the press.
-    - zwave_js is not called with parameter 5 (LED4), which belongs to button 4.
+    - LED4 is set to OFF (reflecting a reset, not a toggle of the boolean).
     """
     topology = hass_topology
     switch = topology.entities.switch_auto
@@ -309,4 +308,4 @@ async def test_scene_buttons_do_not_affect_central_control(
 
     led4_calls = [c for c in zwave_calls if c.data["parameter"] == ZEN35Param.LED4]
     assert len(led4_calls) == 0, \
-        f"{scene_label}: LED4 (button 4) must not be updated by a scene button"
+        f"{scene_label}: LED4 (button 4) must not be touched by a scene button"
