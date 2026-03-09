@@ -30,6 +30,10 @@ pytest blueprints/automation/zooz_zen35_powerview/tests/test_zen35_powerview_blu
 pytest -k "test_button_1_opens_scene" -v
 ```
 
+## Workflow
+
+Before implementing any non-trivial change, present the plan and wait for explicit approval. Do not start writing code or modifying files until the plan is confirmed.
+
 ## Architecture
 
 ### Blueprint Structure
