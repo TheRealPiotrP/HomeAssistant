@@ -60,29 +60,15 @@ blueprint:
             - label: "Rainbow (button 1 blue, 2 green, 3 yellow, button 4 red)"
               value: rainbow
 
-    led_behavior:
-      name: LED Behavior
-      description: >
-        Whether the active LED stays lit showing current state, or briefly
-        confirms a press then turns off.
-      default: persistent
-      selector:
-        select:
-          options:
-            - label: "Persistent (active LED stays on)"
-              value: persistent
-            - label: "Confirm (LED lights briefly, then turns off)"
-              value: confirm
-
     confirm_timeout:
       name: Confirm Timeout
       description: >
-        How long (in seconds) the LED stays lit in confirm mode.
-        Only used when LED Behavior is set to Confirm.
-      default: 5
+        How long (in seconds) the active LED stays lit after a button press,
+        then turns off. Set to 0 to keep the LED on permanently (persistent mode).
+      default: 0
       selector:
         number:
-          min: 1
+          min: 0
           max: 60
           unit_of_measurement: seconds
 
@@ -96,7 +82,6 @@ variables:
   label_fully_close: !input label_fully_close
   label_central_control: !input label_central_control
   led_theme: !input led_theme
-  led_behavior: !input led_behavior
   confirm_timeout: !input confirm_timeout
 
 trigger:
@@ -163,7 +148,7 @@ action:
             data:
               parameter: 4
               value: 2
-          - if: "{{ led_behavior == 'confirm' }}"
+          - if: "{{ confirm_timeout > 0 }}"
             then:
               - delay:
                   seconds: "{{ confirm_timeout }}"
@@ -207,7 +192,7 @@ action:
             data:
               parameter: 4
               value: 2
-          - if: "{{ led_behavior == 'confirm' }}"
+          - if: "{{ confirm_timeout > 0 }}"
             then:
               - delay:
                   seconds: "{{ confirm_timeout }}"
@@ -251,7 +236,7 @@ action:
             data:
               parameter: 4
               value: 3
-          - if: "{{ led_behavior == 'confirm' }}"
+          - if: "{{ confirm_timeout > 0 }}"
             then:
               - delay:
                   seconds: "{{ confirm_timeout }}"
@@ -296,15 +281,15 @@ action:
             data:
               parameter: 10
               value: >
-                {{ 0 if (led_behavior == 'confirm' and states(entities_central_control | first) == 'on') else 3 }}
+                {{ 0 if (confirm_timeout > 0 and states(entities_central_control | first) == 'on') else 3 }}
           - service: zwave_js.set_config_parameter
             target:
               device_id: "{{ device_id }}"
             data:
               parameter: 5
               value: >
-                {{ 3 if (states(entities_central_control | first) == 'on' or led_behavior == 'confirm') else 2 }}
-          - if: "{{ led_behavior == 'confirm' }}"
+                {{ 3 if (states(entities_central_control | first) == 'on' or confirm_timeout > 0) else 2 }}
+          - if: "{{ confirm_timeout > 0 }}"
             then:
               - delay:
                   seconds: "{{ confirm_timeout }}"

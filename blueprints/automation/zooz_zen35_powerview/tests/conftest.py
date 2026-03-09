@@ -89,8 +89,7 @@ def load_blueprint(hass, copy_blueprint_to_config):
         labels,
         *,
         led_theme="default",
-        led_behavior="persistent",
-        confirm_timeout=5,
+        confirm_timeout=0,
     ):
         assert await async_setup_component(
             hass,
@@ -106,7 +105,6 @@ def load_blueprint(hass, copy_blueprint_to_config):
                             "label_fully_close": labels.closed,
                             "label_central_control": labels.auto,
                             "led_theme": led_theme,
-                            "led_behavior": led_behavior,
                             "confirm_timeout": confirm_timeout,
                         },
                     }
