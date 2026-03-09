@@ -72,8 +72,7 @@ blueprint:
           max: 60
           unit_of_measurement: seconds
 
-mode: single
-max_exceeded: silent
+mode: restart
 
 variables:
   device_id: !input zen35_device

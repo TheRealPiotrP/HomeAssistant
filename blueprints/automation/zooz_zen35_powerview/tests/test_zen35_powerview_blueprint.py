@@ -607,6 +607,39 @@ async def test_load_button_confirm_mode_led_turns_on_then_off(
         "second LOAD_MODE call must be OFF (always off) after timeout"
 
 
+async def test_rapid_double_press_not_dropped(
+    hass,
+    hass_topology,
+    load_blueprint,
+):
+    """A second press while the confirm delay is running must not be dropped.
+
+    With mode: restart, the second press cancels the first run and starts fresh.
+    Two button 4 presses → two toggles → state returns to original. The confirm
+    timeout fires once (from the second run) and LED ends dark.
+    """
+    topology = hass_topology
+    switch = topology.entities.switch_auto
+    await load_blueprint(topology.device, topology.labels, confirm_timeout=5)
+
+    zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
+
+    # Fire both presses before yielding to the event loop so the second
+    # press arrives while the first run's delay is pending.
+    _fire_button(hass, topology.device.id, "Scene 004")
+    _fire_button(hass, topology.device.id, "Scene 004")
+    await hass.async_block_till_done()
+
+    # Two toggles: state is back to original (off)
+    assert hass.states.get(switch).state == "off", \
+        "two presses must produce two toggles, returning state to 'off'"
+
+    # LED4 ends dark (confirm timeout fired after the second run)
+    led4_mode_calls = [c for c in zwave_calls if c.data["parameter"] == ZEN35Param.LED4_MODE]
+    assert led4_mode_calls[-1].data["value"] == LEDState.OFF, \
+        "LED4 must be OFF after the second run's confirm timeout"
+
+
 async def test_load_button_persistent_mode_no_led_change(
     hass,
     hass_topology,
