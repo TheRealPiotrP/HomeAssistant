@@ -272,6 +272,48 @@ async def test_button4_no_matching_label_does_nothing(
         f"no zwave calls expected when button 4 condition fails, got {len(zwave_calls)}"
 
 
+# ---------------------------------------------------------------------------
+# Edge case: device has no area assigned
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "scene_label, target",
+    [
+        ("Scene 001", "input_boolean.blinds_open_activated"),
+        ("Scene 002", "input_boolean.blinds_partial_activated"),
+        ("Scene 003", "input_boolean.blinds_closed_activated"),
+        ("Scene 004", "input_boolean.living_room_blinds_central"),
+    ],
+    ids=["button1-no_area", "button2-no_area", "button3-no_area", "button4-no_area"],
+)
+async def test_button_does_nothing_when_device_has_no_area(
+    hass,
+    hass_topology,
+    load_blueprint,
+    zwave_calls,
+    scene_label,
+    target,
+):
+    """All buttons are no-ops when the ZEN35 device has no area assigned.
+
+    The blueprint guards every entity list with `if aid else []`, so removing
+    the device's area must prevent any scene activation, boolean toggle, or
+    LED update.
+    """
+    topology = hass_topology
+
+    dr.async_get(hass).async_update_device(topology.device.id, area_id=None)
+    await load_blueprint(topology.device, topology.labels)
+
+    _fire_button(hass, topology.device.id, scene_label)
+    await hass.async_block_till_done()
+
+    assert hass.states.get(target).state == "off", \
+        f"{scene_label}: target must stay 'off' when device has no area"
+    assert len(zwave_calls) == 0, \
+        f"{scene_label}: no zwave calls expected when device has no area"
+
+
 @pytest.mark.parametrize(
     "scene_label",
     ["Scene 001", "Scene 002", "Scene 003"],
