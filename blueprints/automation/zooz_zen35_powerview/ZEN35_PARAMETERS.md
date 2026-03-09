@@ -56,18 +56,33 @@ Values:
 
 ## Other Parameters
 
-| Parameter | Name                        | Size   | Default | Values                                                                          |
-|-----------|-----------------------------|--------|---------|---------------------------------------------------------------------------------|
-| 16        | Auto Turn-Off Timer         | 4 byte | 0       | 0 = disabled, 1–65535 minutes                                                   |
-| 17        | Auto Turn-On Timer          | 4 byte | 0       | 0 = disabled, 1–65535 minutes                                                   |
-| 18        | Power Failure Behavior      | 1 byte | 2       | 0 = off, 1 = on, 2 = restore last state                                         |
-| 19        | Load Control                | 1 byte | 1       | 0 = disabled, 1 = enabled, 2 = enabled (no physical control)                   |
-| 21–23     | Ramp rates / dimming speeds | 1 byte | —       | Various                                                                         |
-| 27–28     | Brightness limits           | 1 byte | —       | 1–99%                                                                           |
-| 29–30     | Double/Single tap behavior  | 1 byte | —       | 0–3                                                                             |
-| 31        | Physical Custom Brightness  | 1 byte | 0       | 0 = last level, 1–99 (%)                                                        |
-| 32        | 3-Way Switch Type           | 1 byte | 0       | 0 = toggle, 1 = toggle+dim, 2 = momentary (ZAC99), 3 = momentary+smart sequence |
-| 35        | Association Reports         | 1 byte | 15      | 0–15 (bitmask)                                                                  |
-| 36        | Scene Control               | 1 byte | 1       | 0 = disabled, 1 = enabled                                                      |
-| 40        | On/Off Switch Mode          | 1 byte | 0       | 0 = normal, 1 = on/off only                                                     |
-| 42        | Multi-Tap Scene Control     | 1 byte | 0       | 0 = disabled, 1 = enabled                                                       |
+| Parameter | Name                            | Size   | Default | Values                                                                                         |
+|-----------|---------------------------------|--------|---------|-----------------------------------------------------------------------------------------------|
+| 16        | Auto Turn-Off Timer             | 4 byte | 0       | 0 = disabled; 1–65535 minutes                                                                 |
+| 17        | Auto Turn-On Timer              | 4 byte | 0       | 0 = disabled; 1–65535 minutes                                                                 |
+| 18        | On/Off Status After Power Failure | 1 byte | 2     | 0 = always off; 1 = always on; 2 = remembers last status                                     |
+| 19        | Load Control (Smart Bulb Mode)  | 1 byte | 1       | 0 = disable button; 1 = enable button + Z-Wave; 2 = disable both                             |
+| 20        | Disabled Load Behavior          | 1 byte | 0       | 0 = reports status + changes LED; 1 = no reporting, no LED changes                           |
+| 21        | Physical Ramp Rate ON           | 1 byte | 0       | 0 = instant; 1–99 seconds                                                                    |
+| 22        | Physical Ramp Rate OFF          | 1 byte | 2       | 0 = instant; 1–99 seconds                                                                    |
+| 23        | Physical Dimming Speed          | 1 byte | 5       | 1–99 seconds                                                                                  |
+| 24        | Z-Wave Ramp Rate ON             | 1 byte | 255     | 0–99 seconds; 255 = match parameter 21                                                        |
+| 25        | Z-Wave Ramp Rate OFF            | 1 byte | 255     | 0–99 seconds; 255 = match parameter 22                                                        |
+| 26        | Remote Z-Wave Dimming Duration  | 1 byte | 5       | 1–99 seconds                                                                                  |
+| 27        | Minimum Brightness              | 1 byte | 1       | 1–99 percent                                                                                  |
+| 28        | Maximum Brightness              | 1 byte | 99      | 1–99 percent                                                                                  |
+| 29        | Dimmer Button Double Tap        | 1 byte | 0       | 0 = full brightness; 1 = custom brightness; 2 = max brightness; 3 = disabled                 |
+| 30        | Dimmer Button Single Tap        | 1 byte | 0       | 0 = last level; 1 = custom brightness; 2 = max brightness; 3 = full brightness               |
+| 31        | Physical Custom Brightness On   | 1 byte | 0       | 0 = last level; 1–99 percent                                                                  |
+| 32        | 3-Way Switch Type               | 1 byte | 0       | 0 = toggle; 1 = toggle with dimming; 2 = momentary (ZAC99); 3 = momentary with smart sequence |
+| 33        | Multilevel Dimming Reports      | 1 byte | 2       | 0–2 (reporting behavior variants)                                                             |
+| 34        | Disable Button Programming      | 1 byte | 0       | 0 = enabled; 1 = disabled                                                                    |
+| 35        | Association Reports             | 1 byte | 15      | 0–15 (combinatorial: physical / Z-Wave / timer triggers)                                      |
+| 36        | Dimmer Button Scene Control     | 1 byte | 1       | 0 = disabled; 1 = enabled                                                                    |
+| 37        | Scene Control From 3-Way Switch | 1 byte | 0       | 0 = disabled; 1 = enabled                                                                    |
+| 38        | Disable LED Flash On Setting Change | 1 byte | 0   | 0 = flashes; 1 = no flash                                                                    |
+| 39        | Disable LED Flash On Button Press | 1 byte | 0     | 0 = flashes; 1 = no flash                                                                    |
+| 40        | On/Off Switch Mode              | 1 byte | 0       | 0 = disabled; 1 = enabled                                                                    |
+| 41        | Basic Set Custom Brightness On  | 1 byte | 0       | 0 = last level; 1–99 percent                                                                  |
+| 42        | Scene Control Multi-Tap         | 1 byte | 0       | 0 = enabled; 1 = disabled                                                                    |
+| 43        | Gamma Factor                    | 1 byte | —       | 10–50 (represents 1.0–5.0)                                                                   |
