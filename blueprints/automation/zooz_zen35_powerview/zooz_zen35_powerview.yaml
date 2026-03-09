@@ -20,31 +20,31 @@ blueprint:
 
     label_fully_open:
       name: Label for "fully open" scenes
-      description: Label ID you attach to PowerView scenes that fully open shades.
+      description: Label you attach to PowerView scenes that fully open shades.
       default: powerview.scenes.open
       selector:
-        text:
+        label:
 
     label_partially_open:
       name: Label for "partially open" scenes
-      description: Label ID for scenes that partially open shades.
+      description: Label for scenes that partially open shades.
       default: powerview.scenes.partially_open
       selector:
-        text:
+        label:
 
     label_fully_close:
       name: Label for "fully close" scenes
-      description: Label ID for scenes that fully close shades.
+      description: Label for scenes that fully close shades.
       default: powerview.scenes.closed
       selector:
-        text:
+        label:
 
     label_central_control:
       name: Label for central-control input_boolean
-      description: Label ID for the helper that enables central blinds automation.
+      description: Label for the helper that enables central blinds automation.
       default: powerview.automated
       selector:
-        text:
+        label:
 
 mode: single
 max_exceeded: silent
