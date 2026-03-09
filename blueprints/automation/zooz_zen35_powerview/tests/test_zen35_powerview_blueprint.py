@@ -9,7 +9,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import async_mock_service
 from homeassistant.helpers import device_registry as dr
 
-from conftest import ZEN35Param, LEDState
+from conftest import ZEN35Param, LEDState, LEDColor
 
 
 @pytest.fixture
@@ -37,19 +37,34 @@ def _fire_button(hass, device_id, scene_label):
             "Scene 001",
             "input_boolean.blinds_open_activated",
             ["input_boolean.blinds_partial_activated", "input_boolean.blinds_closed_activated"],
-            {ZEN35Param.LED1: LEDState.ON, ZEN35Param.LED2: LEDState.OFF, ZEN35Param.LED3: LEDState.OFF},
+            {
+                ZEN35Param.LED1_COLOR: LEDColor.WHITE,
+                ZEN35Param.LED1_MODE: LEDState.ON,
+                ZEN35Param.LED2_MODE: LEDState.OFF,
+                ZEN35Param.LED3_MODE: LEDState.OFF,
+            },
         ),
         (
             "Scene 002",
             "input_boolean.blinds_partial_activated",
             ["input_boolean.blinds_open_activated", "input_boolean.blinds_closed_activated"],
-            {ZEN35Param.LED1: LEDState.OFF, ZEN35Param.LED2: LEDState.ON, ZEN35Param.LED3: LEDState.OFF},
+            {
+                ZEN35Param.LED2_COLOR: LEDColor.WHITE,
+                ZEN35Param.LED1_MODE: LEDState.OFF,
+                ZEN35Param.LED2_MODE: LEDState.ON,
+                ZEN35Param.LED3_MODE: LEDState.OFF,
+            },
         ),
         (
             "Scene 003",
             "input_boolean.blinds_closed_activated",
             ["input_boolean.blinds_open_activated", "input_boolean.blinds_partial_activated"],
-            {ZEN35Param.LED1: LEDState.OFF, ZEN35Param.LED2: LEDState.OFF, ZEN35Param.LED3: LEDState.ON},
+            {
+                ZEN35Param.LED3_COLOR: LEDColor.WHITE,
+                ZEN35Param.LED1_MODE: LEDState.OFF,
+                ZEN35Param.LED2_MODE: LEDState.OFF,
+                ZEN35Param.LED3_MODE: LEDState.ON,
+            },
         ),
     ],
     ids=["button1-open-LED1", "button2-partial-LED2", "button3-close-LED3"],
@@ -145,14 +160,16 @@ async def test_button4_toggles_central_control_and_updates_led(
     assert hass.states.get(switch).state == expected_new_state, \
         f"input_boolean should have toggled from '{initial_state}' to '{expected_new_state}'"
 
-    assert len(zwave_calls) == 4, \
-        f"Expected 4 zwave calls (all LEDs), got {len(zwave_calls)}"
+    assert len(zwave_calls) == 5, \
+        f"Expected 5 zwave calls (LED1-3 mode + LED4 color + LED4 mode), got {len(zwave_calls)}"
     actual = {c.data["parameter"]: c.data["value"] for c in zwave_calls}
-    assert actual[ZEN35Param.LED4] == expected_led, \
-        f"LED4: expected {expected_led} for initial state '{initial_state}'"
-    assert actual[ZEN35Param.LED1] == LEDState.OFF
-    assert actual[ZEN35Param.LED2] == LEDState.OFF
-    assert actual[ZEN35Param.LED3] == LEDState.OFF
+    assert actual[ZEN35Param.LED4_MODE] == expected_led, \
+        f"LED4 mode: expected {expected_led} for initial state '{initial_state}'"
+    assert actual[ZEN35Param.LED4_COLOR] == LEDColor.RED, \
+        f"LED4 color: expected RED in default theme for initial state '{initial_state}'"
+    assert actual[ZEN35Param.LED1_MODE] == LEDState.OFF
+    assert actual[ZEN35Param.LED2_MODE] == LEDState.OFF
+    assert actual[ZEN35Param.LED3_MODE] == LEDState.OFF
 
 
 # ---------------------------------------------------------------------------
@@ -348,6 +365,6 @@ async def test_scene_buttons_do_not_affect_central_control(
     assert hass.states.get(switch).state == "on", \
         f"{scene_label}: central-control boolean must not be toggled by a scene button"
 
-    led4_calls = [c for c in zwave_calls if c.data["parameter"] == ZEN35Param.LED4]
+    led4_calls = [c for c in zwave_calls if c.data["parameter"] in (ZEN35Param.LED4_MODE, ZEN35Param.LED4_COLOR)]
     assert len(led4_calls) == 0, \
         f"{scene_label}: LED4 (button 4) must not be touched by a scene button"

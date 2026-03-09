@@ -10,15 +10,31 @@ from homeassistant.setup import async_setup_component
 
 
 class ZEN35Param(IntEnum):
-    LED1 = 2
-    LED2 = 3
-    LED3 = 4
-    LED4 = 5
+    # LED mode parameters (params 2–5): 2=always off, 3=always on
+    LED1_MODE = 2
+    LED2_MODE = 3
+    LED3_MODE = 4
+    LED4_MODE = 5
+    # LED color parameters (params 7–10)
+    LED1_COLOR = 7
+    LED2_COLOR = 8
+    LED3_COLOR = 9
+    LED4_COLOR = 10
 
 
 class LEDState(IntEnum):
     OFF = 2
     ON = 3
+
+
+class LEDColor(IntEnum):
+    WHITE = 0
+    BLUE = 1
+    GREEN = 2
+    RED = 3
+    MAGENTA = 4
+    YELLOW = 5
+    CYAN = 6
 
 
 BLUEPRINT_DIR = Path(__file__).resolve().parent.parent
@@ -68,7 +84,14 @@ def mock_zwave_config_entry(hass) -> ConfigEntry:
 def load_blueprint(hass, copy_blueprint_to_config):
     """Load the blueprint into HA. Accepts a Labels namedtuple from hass_topology."""
 
-    async def _load(device, labels):
+    async def _load(
+        device,
+        labels,
+        *,
+        led_theme="default",
+        led_behavior="persistent",
+        confirm_timeout=5,
+    ):
         assert await async_setup_component(
             hass,
             automation.DOMAIN,
@@ -82,6 +105,9 @@ def load_blueprint(hass, copy_blueprint_to_config):
                             "label_partially_open": labels.partial,
                             "label_fully_close": labels.closed,
                             "label_central_control": labels.auto,
+                            "led_theme": led_theme,
+                            "led_behavior": led_behavior,
+                            "confirm_timeout": confirm_timeout,
                         },
                     }
                 }
