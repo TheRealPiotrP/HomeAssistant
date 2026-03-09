@@ -173,6 +173,64 @@ async def test_button4_toggles_central_control_and_updates_led(
 
 
 # ---------------------------------------------------------------------------
+# Initialization: theme colors applied on startup / automation reload
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "led_theme, expected_colors",
+    [
+        (
+            "default",
+            {
+                ZEN35Param.LOAD_COLOR: LEDColor.WHITE,
+                ZEN35Param.LED1_COLOR: LEDColor.WHITE,
+                ZEN35Param.LED2_COLOR: LEDColor.WHITE,
+                ZEN35Param.LED3_COLOR: LEDColor.WHITE,
+                ZEN35Param.LED4_COLOR: LEDColor.RED,
+            },
+        ),
+        (
+            "rainbow",
+            {
+                ZEN35Param.LOAD_COLOR: LEDColor.CYAN,
+                ZEN35Param.LED1_COLOR: LEDColor.BLUE,
+                ZEN35Param.LED2_COLOR: LEDColor.GREEN,
+                ZEN35Param.LED3_COLOR: LEDColor.YELLOW,
+                ZEN35Param.LED4_COLOR: LEDColor.RED,
+            },
+        ),
+    ],
+    ids=["init-default-theme", "init-rainbow-theme"],
+)
+async def test_init_sets_led_colors(
+    hass,
+    hass_topology,
+    load_blueprint,
+    led_theme,
+    expected_colors,
+):
+    """On startup or automation reload, all LED color parameters are set to the theme.
+
+    zwave_calls is created inline after load_blueprint so it only captures
+    the manually-fired automation_reloaded event, not any setup activity.
+    """
+    topology = hass_topology
+    await load_blueprint(topology.device, topology.labels, led_theme=led_theme)
+
+    zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
+
+    hass.bus.async_fire("automation_reloaded")
+    await hass.async_block_till_done()
+
+    assert len(zwave_calls) == 5, \
+        f"Expected 5 color param calls on init, got {len(zwave_calls)}"
+    actual = {c.data["parameter"]: c.data["value"] for c in zwave_calls}
+    for param, value in expected_colors.items():
+        assert actual.get(param) == value, \
+            f"{led_theme}: param {param} expected {value}, got {actual.get(param)}"
+
+
+# ---------------------------------------------------------------------------
 # Negative tests: label/area mismatches
 # ---------------------------------------------------------------------------
 

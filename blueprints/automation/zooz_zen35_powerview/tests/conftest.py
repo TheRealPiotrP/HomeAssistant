@@ -15,7 +15,8 @@ class ZEN35Param(IntEnum):
     LED2_MODE = 3
     LED3_MODE = 4
     LED4_MODE = 5
-    # LED color parameters (params 7–10)
+    # LED color parameters (params 6–10)
+    LOAD_COLOR = 6
     LED1_COLOR = 7
     LED2_COLOR = 8
     LED3_COLOR = 9

@@ -4,13 +4,97 @@ Automatically map Zooz ZEN35 switches to Hunter Douglas PowerView blind scenes u
 
 ## Button layout
 
+```
+┌─────────────────────┐
+│   dimmer  (load)    │
+│         💡          │
+├──────────┬──────────┤
+│   💡  1  │   💡  2  │
+├──────────┼──────────┤
+│   💡  3  │   💡  4  │
+└──────────┴──────────┘
+```
+
 | Button | Action |
 |--------|--------|
-| **Big button** | Not handled — controls the physical load (light/fan) |
+| **Dimmer** | Controls the physical load (light/fan). Not handled by this blueprint. |
 | **Button 1** | Activate "fully open" PowerView scenes |
 | **Button 2** | Activate "partially open" PowerView scenes |
 | **Button 3** | Activate "fully close" PowerView scenes |
 | **Button 4** | Toggle central-control mode (input_boolean) |
+
+## LED indicators
+
+### Color themes
+
+Colors are applied to the device on HA startup and whenever the automation is saved.
+
+```
+┌─────────────────────┐     ┌─────────────────────┐
+│   dimmer  (load)    │     │   dimmer  (load)    │
+│         ⚪          │     │         🩵          │
+├──────────┬──────────┤     ├──────────┬──────────┤
+│   ⚪  1  │   ⚪  2  │     │   🔵  1  │   🟢  2  │
+├──────────┼──────────┤     ├──────────┼──────────┤
+│   ⚪  3  │   🔴  4  │     │   🟡  3  │   🔴  4  │
+└──────────┴──────────┘     └──────────┴──────────┘
+      default theme               rainbow theme
+```
+
+| | Load | Button 1 | Button 2 | Button 3 | Button 4 |
+|-|------|----------|----------|----------|----------|
+| **Default** | ⚪ white | ⚪ white | ⚪ white | ⚪ white | 🔴 red |
+| **Rainbow** | 🩵 cyan | 🔵 blue | 🟢 green | 🟡 yellow | 🔴 red |
+
+The load LED uses its default HA behavior (mode 0): on when the load is off, off when it is on. The blueprint only sets its color — it never overrides the mode.
+
+### Persistent mode (`confirm_timeout = 0`, default)
+
+The active LED stays lit until a different button is pressed.
+
+**Example — scene 2 active, central control on:**
+
+```
+┌─────────────────────┐
+│   dimmer  (load)    │
+│         ⚪          │  ← on when load is off (locator behavior)
+├──────────┬──────────┤
+│   ⬛  1  │   ⚪  2  │  ← scene 2 active
+├──────────┼──────────┤
+│   ⬛  3  │   🔴  4  │  ← central control on
+└──────────┴──────────┘
+```
+
+### Confirm mode (`confirm_timeout > 0`)
+
+The active LED lights up briefly to acknowledge the press, then turns off.
+Button 4 blinks **white** when toggling on, **red** when toggling off.
+
+**Immediately after pressing button 2:**
+
+```
+┌─────────────────────┐
+│   dimmer  (load)    │
+│         ⚪          │
+├──────────┬──────────┤
+│   ⬛  1  │   ⚪  2  │  ← briefly lit
+├──────────┼──────────┤
+│   ⬛  3  │   ⬛  4  │
+└──────────┴──────────┘
+```
+
+**After timeout — steady state:**
+
+```
+┌─────────────────────┐
+│   dimmer  (load)    │
+│         ⚪          │  ← unchanged (load LED not affected)
+├──────────┬──────────┤
+│   ⬛  1  │   ⬛  2  │
+├──────────┼──────────┤
+│   ⬛  3  │   ⬛  4  │
+└──────────┴──────────┘
+```
 
 ## Setup
 
@@ -38,6 +122,8 @@ In **Settings → Labels**, create (or reuse) these labels (IDs must match what 
 - Import the blueprint (or copy `zooz_zen35_powerview.yaml` to `config/blueprints/automation/zooz_zen35_powerview/`)
 - Create an automation from the blueprint
 - Select the ZEN35 device
+- Choose your **LED Color Theme** (`default` or `rainbow`)
+- Set **Confirm Timeout** if you want LEDs to go dark after a press (0 = stay on)
 - Optionally change the label IDs if you used different ones
 - Save — no entity selection needed; discovery is automatic per area
 

@@ -90,11 +90,18 @@ trigger:
     event_data:
       command_class_name: Central Scene
       device_id: !input zen35_device
+    id: button_press
+  - platform: homeassistant
+    event: start
+    id: init
+  - platform: event
+    event_type: automation_reloaded
+    id: init
 
 action:
   - variables:
-      scene_id: "{{ trigger.event.data.label }}"
-      scene_value: "{{ trigger.event.data.value }}"
+      scene_id: "{{ trigger.event.data.label | default('') }}"
+      scene_value: "{{ trigger.event.data.value | default('') }}"
       area_id: "{{ device_attr(device_id, 'area_id') }}"
       # Entities in this area with each label (only when area exists)
       entities_fully_open: >
@@ -110,11 +117,47 @@ action:
         {% set aid = device_attr(device_id, 'area_id') %}
         {{ (label_entities(label_central_control) | select('in', area_entities(aid)) | select('search', 'input_boolean.') | list) if aid else [] }}
       # LED colors derived from theme (button 4 is always red = 3)
+      led_color_load: "{{ 6 if led_theme == 'rainbow' else 0 }}"
       led_color_b1: "{{ 1 if led_theme == 'rainbow' else 0 }}"
       led_color_b2: "{{ 2 if led_theme == 'rainbow' else 0 }}"
       led_color_b3: "{{ 5 if led_theme == 'rainbow' else 0 }}"
 
   - choose:
+      # Initialization: apply theme colors to all LEDs
+      - conditions: "{{ trigger.id == 'init' }}"
+        sequence:
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 6
+              value: "{{ led_color_load }}"
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 7
+              value: "{{ led_color_b1 }}"
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 8
+              value: "{{ led_color_b2 }}"
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 9
+              value: "{{ led_color_b3 }}"
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 10
+              value: 3
+
+
       # Button 1 (Scene 001) – Fully open
       - conditions:
           - "{{ scene_id == 'Scene 001' }}"
