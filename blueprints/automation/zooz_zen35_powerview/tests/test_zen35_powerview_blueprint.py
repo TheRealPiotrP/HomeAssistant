@@ -426,3 +426,144 @@ async def test_scene_buttons_do_not_affect_central_control(
     led4_calls = [c for c in zwave_calls if c.data["parameter"] in (ZEN35Param.LED4_MODE, ZEN35Param.LED4_COLOR)]
     assert len(led4_calls) == 0, \
         f"{scene_label}: LED4 (button 4) must not be touched by a scene button"
+
+
+# ---------------------------------------------------------------------------
+# Rainbow theme: button press colors
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "scene_label, target, expected_color_param, expected_color",
+    [
+        ("Scene 001", "input_boolean.blinds_open_activated",  ZEN35Param.LED1_COLOR, LEDColor.BLUE),
+        ("Scene 002", "input_boolean.blinds_partial_activated", ZEN35Param.LED2_COLOR, LEDColor.GREEN),
+        ("Scene 003", "input_boolean.blinds_closed_activated", ZEN35Param.LED3_COLOR, LEDColor.YELLOW),
+    ],
+    ids=["button1-rainbow-blue", "button2-rainbow-green", "button3-rainbow-yellow"],
+)
+async def test_scene_button_rainbow_theme_sets_correct_color(
+    hass,
+    hass_topology,
+    load_blueprint,
+    zwave_calls,
+    scene_label,
+    target,
+    expected_color_param,
+    expected_color,
+):
+    """Rainbow theme: each scene button lights up in its assigned color."""
+    topology = hass_topology
+    await load_blueprint(topology.device, topology.labels, led_theme="rainbow")
+
+    _fire_button(hass, topology.device.id, scene_label)
+    await hass.async_block_till_done()
+
+    assert hass.states.get(target).state == "on", \
+        f"{scene_label}: scene target should activate"
+
+    actual = {c.data["parameter"]: c.data["value"] for c in zwave_calls}
+    assert actual.get(expected_color_param) == expected_color, \
+        f"{scene_label}: expected color {expected_color} on param {expected_color_param}"
+
+
+# ---------------------------------------------------------------------------
+# Confirm mode: LED turns on then off after timeout
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "scene_label, active_mode_param, active_color_param",
+    [
+        ("Scene 001", ZEN35Param.LED1_MODE, ZEN35Param.LED1_COLOR),
+        ("Scene 002", ZEN35Param.LED2_MODE, ZEN35Param.LED2_COLOR),
+        ("Scene 003", ZEN35Param.LED3_MODE, ZEN35Param.LED3_COLOR),
+    ],
+    ids=["button1-confirm", "button2-confirm", "button3-confirm"],
+)
+async def test_scene_button_confirm_mode_led_turns_off_after_timeout(
+    hass,
+    hass_topology,
+    load_blueprint,
+    scene_label,
+    active_mode_param,
+    active_color_param,
+):
+    """Confirm mode: scene button LED turns on then off after confirm_timeout seconds.
+
+    In the test environment the delay resolves within async_block_till_done, so
+    the full sequence (ON → delay → OFF) completes before we assert. We verify
+    both the ON and OFF calls appear in order in the call list.
+    """
+    topology = hass_topology
+    await load_blueprint(topology.device, topology.labels, confirm_timeout=5)
+
+    zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
+
+    _fire_button(hass, topology.device.id, scene_label)
+    await hass.async_block_till_done()
+
+    # Total calls: color(1) + active-mode-ON(1) + 2×other-mode-OFF(2) + active-mode-OFF-after-timeout(1) = 5
+    assert len(zwave_calls) == 5, \
+        f"{scene_label}: expected 5 zwave calls in confirm mode, got {len(zwave_calls)}"
+
+    mode_calls = [c for c in zwave_calls if c.data["parameter"] == active_mode_param]
+    assert len(mode_calls) == 2, \
+        f"{scene_label}: expected 2 calls on active mode param (ON then OFF)"
+    assert mode_calls[0].data["value"] == LEDState.ON, \
+        f"{scene_label}: first active-mode call must be ON"
+    assert mode_calls[-1].data["value"] == LEDState.OFF, \
+        f"{scene_label}: last active-mode call must be OFF (timeout)"
+
+    color_calls = [c for c in zwave_calls if c.data["parameter"] == active_color_param]
+    assert len(color_calls) == 1
+    assert color_calls[0].data["value"] == LEDColor.WHITE
+
+
+@pytest.mark.parametrize(
+    "initial_state, expected_led4_color",
+    [
+        ("off", LEDColor.WHITE),   # toggle to on → blink white
+        ("on",  LEDColor.RED),     # toggle to off → blink red
+    ],
+    ids=["button4-confirm-toggle-on", "button4-confirm-toggle-off"],
+)
+async def test_button4_confirm_mode_led_turns_off_after_timeout(
+    hass,
+    hass_topology,
+    load_blueprint,
+    initial_state,
+    expected_led4_color,
+):
+    """Confirm mode: button 4 blinks (white when toggling on, red when off) then goes dark.
+
+    The full sequence completes within async_block_till_done. We verify both the
+    ON and the timeout OFF calls appear on LED4_MODE in order.
+    """
+    topology = hass_topology
+    switch = topology.entities.switch_auto
+
+    if initial_state == "on":
+        await hass.services.async_call(
+            "input_boolean", "turn_on", {"entity_id": switch}, blocking=True
+        )
+
+    await load_blueprint(topology.device, topology.labels, confirm_timeout=5)
+
+    zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
+
+    _fire_button(hass, topology.device.id, "Scene 004")
+    await hass.async_block_till_done()
+
+    # Total: LED1-3 mode OFF(3) + LED4 color(1) + LED4 mode ON(1) + LED4 mode OFF after timeout(1) = 6
+    assert len(zwave_calls) == 6, \
+        f"expected 6 zwave calls in confirm mode for button 4, got {len(zwave_calls)}"
+
+    led4_color_calls = [c for c in zwave_calls if c.data["parameter"] == ZEN35Param.LED4_COLOR]
+    assert len(led4_color_calls) == 1
+    assert led4_color_calls[0].data["value"] == expected_led4_color, \
+        f"LED4 color: expected {expected_led4_color} when toggling from '{initial_state}'"
+
+    led4_mode_calls = [c for c in zwave_calls if c.data["parameter"] == ZEN35Param.LED4_MODE]
+    assert len(led4_mode_calls) == 2, \
+        "expected 2 LED4 mode calls (ON then OFF after timeout)"
+    assert led4_mode_calls[0].data["value"] == LEDState.ON
+    assert led4_mode_calls[1].data["value"] == LEDState.OFF
