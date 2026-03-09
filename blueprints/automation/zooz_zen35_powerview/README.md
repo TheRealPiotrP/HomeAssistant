@@ -147,6 +147,8 @@ Create a separate automation that triggers when `input_boolean.living_room_blind
 
 ## Testing
 
+### Automated tests
+
 From the repo root, install test deps and run pytest:
 
 ```bash
@@ -157,3 +159,42 @@ pytest -v
 ```
 
 Tests fire `zwave_js_value_notification` events into a real Home Assistant instance and verify actual state changes — scenes activate, the central-control `input_boolean` toggles, and `zwave_js.set_config_parameter` calls are captured to verify LED parameter values.
+
+### Manual hardware checklist
+
+Run this after deploying to a real ZEN35. Open **Developer Tools → States** in a side window to watch entity state changes in real time.
+
+#### 1. Startup colors
+
+Save (or reload) the automation and check that the LEDs immediately update to your chosen theme — no button press required.
+
+| Theme | Expected |
+|-------|----------|
+| Default | Load ⚪, buttons 1–3 ⚪, button 4 🔴 |
+| Rainbow | Load 🩵, button 1 🔵, button 2 🟢, button 3 🟡, button 4 🔴 |
+
+#### 2. Buttons 1–3 — scene activation
+
+Press each button and verify:
+- The corresponding PowerView scene activates (shades move).
+- In **persistent mode**: the pressed button's LED stays lit; the others go dark.
+- In **confirm mode**: the pressed button's LED flashes briefly, then all go dark.
+
+#### 3. Button 4 — opt-out toggle
+
+| Starting state | Press | Expected LED4 | Expected boolean |
+|----------------|-------|---------------|-----------------|
+| Opted in (central control on) | Button 4 | ⬛ dark | turns off |
+| Opted out (central control off) | Button 4 | 🔴 red | turns on |
+
+In **confirm mode** the LED flashes (white = opting in, red = opting out) then goes dark regardless of the final state.
+
+#### 4. Load / dimmer button
+
+- Physical load should switch normally (this is handled by the switch hardware, not the blueprint).
+- **Persistent mode**: load LED follows locator behavior (on when load is off, off when load is on). No change from pressing the dimmer.
+- **Confirm mode**: load LED briefly flashes on when the dimmer is pressed, then goes dark.
+
+#### 5. Area isolation
+
+If you have two ZEN35s in different rooms, press a button on one switch and confirm that only the scenes in that switch's area activate — scenes in the other room must not move.
