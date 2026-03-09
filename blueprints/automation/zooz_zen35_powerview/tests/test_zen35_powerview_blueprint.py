@@ -567,3 +567,59 @@ async def test_button4_confirm_mode_led_turns_off_after_timeout(
         "expected 2 LED4 mode calls (ON then OFF after timeout)"
     assert led4_mode_calls[0].data["value"] == LEDState.ON
     assert led4_mode_calls[1].data["value"] == LEDState.OFF
+
+
+# ---------------------------------------------------------------------------
+# Load button (Scene 005)
+# ---------------------------------------------------------------------------
+
+async def test_load_button_confirm_mode_led_turns_on_then_off(
+    hass,
+    hass_topology,
+    load_blueprint,
+):
+    """Confirm mode: load button LED turns on briefly then turns off.
+
+    In confirm mode the blueprint sets param 1 (LOAD_MODE) to 3 (always on),
+    waits confirm_timeout seconds, then sets it to 2 (always off). The delay
+    resolves synchronously in the test environment so we capture both calls.
+    """
+    topology = hass_topology
+    await load_blueprint(topology.device, topology.labels, confirm_timeout=5)
+
+    zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
+
+    _fire_button(hass, topology.device.id, "Scene 005")
+    await hass.async_block_till_done()
+
+    assert len(zwave_calls) == 2, \
+        f"expected 2 zwave calls for load button confirm mode, got {len(zwave_calls)}"
+
+    load_mode_calls = [c for c in zwave_calls if c.data["parameter"] == ZEN35Param.LOAD_MODE]
+    assert len(load_mode_calls) == 2, \
+        "expected 2 LOAD_MODE calls (ON then OFF)"
+    assert load_mode_calls[0].data["value"] == LEDState.ON, \
+        "first LOAD_MODE call must be ON (always on)"
+    assert load_mode_calls[1].data["value"] == LEDState.OFF, \
+        "second LOAD_MODE call must be OFF (always off) after timeout"
+
+
+async def test_load_button_persistent_mode_no_led_change(
+    hass,
+    hass_topology,
+    load_blueprint,
+    zwave_calls,
+):
+    """Persistent mode: pressing the load button does not touch any LED parameter.
+
+    In persistent mode (confirm_timeout == 0) the blueprint has no branch for
+    Scene 005, so the load LED stays at its hardware default (mode 0 = locator).
+    """
+    topology = hass_topology
+    await load_blueprint(topology.device, topology.labels, confirm_timeout=0)
+
+    _fire_button(hass, topology.device.id, "Scene 005")
+    await hass.async_block_till_done()
+
+    assert len(zwave_calls) == 0, \
+        f"persistent mode: no zwave calls expected for load button, got {len(zwave_calls)}"

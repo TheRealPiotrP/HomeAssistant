@@ -290,6 +290,27 @@ action:
                   parameter: 4
                   value: 2
 
+      # Load button (Scene 005) – Confirm-mode LED flash only
+      - conditions:
+          - "{{ scene_id == 'Scene 005' }}"
+          - "{{ scene_value == 'KeyPressed' }}"
+          - "{{ confirm_timeout > 0 }}"
+        sequence:
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 1
+              value: 3
+          - delay:
+              seconds: "{{ confirm_timeout }}"
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 1
+              value: 2
+
       # Button 4 (Scene 004) – Toggle central control
       - conditions:
           - "{{ scene_id == 'Scene 004' }}"

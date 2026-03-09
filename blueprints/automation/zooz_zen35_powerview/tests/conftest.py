@@ -10,7 +10,8 @@ from homeassistant.setup import async_setup_component
 
 
 class ZEN35Param(IntEnum):
-    # LED mode parameters (params 2–5): 2=always off, 3=always on
+    # LED mode parameters (params 1–5): 2=always off, 3=always on
+    LOAD_MODE = 1
     LED1_MODE = 2
     LED2_MODE = 3
     LED3_MODE = 4
