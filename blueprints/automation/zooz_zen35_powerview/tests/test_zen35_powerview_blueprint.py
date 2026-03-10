@@ -497,7 +497,7 @@ async def test_scene_button_confirm_mode_led_turns_off_after_timeout(
     both the ON and OFF calls appear in order in the call list.
     """
     topology = hass_topology
-    await load_blueprint(topology.device, topology.labels, confirm_timeout=5)
+    await load_blueprint(topology.device, topology.labels, confirm_timeout=0.001)
 
     zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
 
@@ -549,7 +549,7 @@ async def test_button4_confirm_mode_led_turns_off_after_timeout(
             "input_boolean", "turn_on", {"entity_id": switch}, blocking=True
         )
 
-    await load_blueprint(topology.device, topology.labels, confirm_timeout=5)
+    await load_blueprint(topology.device, topology.labels, confirm_timeout=0.001)
 
     zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
 
@@ -588,7 +588,7 @@ async def test_load_button_confirm_mode_led_turns_on_then_off(
     resolves synchronously in the test environment so we capture both calls.
     """
     topology = hass_topology
-    await load_blueprint(topology.device, topology.labels, confirm_timeout=5)
+    await load_blueprint(topology.device, topology.labels, confirm_timeout=0.001)
 
     zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
 
@@ -620,7 +620,7 @@ async def test_rapid_double_press_not_dropped(
     """
     topology = hass_topology
     switch = topology.entities.switch_auto
-    await load_blueprint(topology.device, topology.labels, confirm_timeout=5)
+    await load_blueprint(topology.device, topology.labels, confirm_timeout=0.001)
 
     zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
 
