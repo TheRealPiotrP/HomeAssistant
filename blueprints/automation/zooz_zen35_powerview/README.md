@@ -131,17 +131,56 @@ In **Settings → Labels**, create (or reuse) these labels (IDs must match what 
 - Put each ZEN35 device in the same area as the PowerView scenes and input_boolean for that room
 - Example: ZEN35 in "Living Room" + PowerView scenes in "Living Room" + `input_boolean.living_room_blinds_central` in "Living Room"
 
-### 4. Create one automation per switch
+### 4. (Optional) Enable PowerView scheduled event control
+
+If you want button 4 to also enable/disable PowerView's own scheduled automations (e.g. sunrise/sunset scenes configured inside PowerView), do the following.
+
+#### 4a. Add to `configuration.yaml`
+
+```yaml
+rest_command:
+  powerview_set_scheduled_event:
+    url: "http://{{ hub }}/api/scheduledEvents/{{ id }}"
+    method: PUT
+    content_type: "application/json"
+    payload: '{"scheduledEvent": {"enabled": {{ enabled }}}}'
+
+sensor:
+  - platform: rest
+    resource: http://192.168.4.22/api/scheduledEvents   # replace with your hub IP
+    name: powerview_scheduled_events
+    scan_interval: 60
+    value_template: "{{ value_json.scheduledEventData | length }}"
+    json_attributes:
+      - scheduledEventData
+```
+
+Restart Home Assistant after adding these.
+
+#### 4b. Label scene entities with their PowerView scheduled event IDs
+
+For each HA scene entity that corresponds to a PowerView scheduled event, add a label whose ID is `powerview.scheduledEvent_id.<id>` where `<id>` is the numeric scheduled event ID from the PowerView API (`GET http://<hub-ip>/api/scheduledEvents`).
+
+Because the HA label UI slugifies names, you must set the label ID directly. The easiest way is to edit `.storage/core.label_registry` and add entries like:
+
+```json
+{"label_id": "powerview.scheduledEvent_id.48860", "name": "PV Sched Open", "color": null, "description": null, "icon": null}
+```
+
+Then restart Home Assistant and assign those labels to the corresponding scene entities.
+
+### 5. Create one automation per switch
 
 - Import the blueprint (or copy `zooz_zen35_powerview.yaml` to `config/blueprints/automation/zooz_zen35_powerview/`)
 - Create an automation from the blueprint
 - Select the ZEN35 device
+- (Optional) Select the **PowerView Hub** device to enable scheduled event toggling
 - Choose your **LED Color Theme** (`default` or `rainbow`)
 - Set **Confirm Timeout** if you want LEDs to go dark after a press (0 = stay on)
 - Optionally change the label IDs if you used different ones
 - Save — no entity selection needed; discovery is automatic per area
 
-### 5. Central-control automation
+### 6. Central-control automation
 
 Create a separate automation that triggers when `input_boolean.living_room_blinds_central` (or similar) is turned on, and runs your central blinds logic. Button 4 on the ZEN35 toggles that helper.
 

@@ -659,3 +659,164 @@ async def test_load_button_persistent_mode_no_led_change(
 
     assert len(zwave_calls) == 0, \
         f"persistent mode: no zwave calls expected for load button, got {len(zwave_calls)}"
+
+
+# ---------------------------------------------------------------------------
+# PowerView scheduled event integration
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "initial_boolean, initial_sensor_enabled, expected_new_boolean, expected_enabled_str, expected_led4",
+    [
+        # Opted in → press → opt out: boolean ON→OFF, events disabled, LED4 ON (red)
+        ("on",  True,  "off", "false", LEDState.ON),
+        # Opted out → press → opt in: boolean OFF→ON, events enabled, LED4 OFF
+        ("off", False, "on",  "true",  LEDState.OFF),
+    ],
+    ids=["button4-powerview-opts-out", "button4-powerview-opts-in"],
+)
+async def test_button4_powerview_toggles_scheduled_events(
+    hass,
+    hass_topology,
+    load_blueprint,
+    initial_boolean,
+    initial_sensor_enabled,
+    expected_new_boolean,
+    expected_enabled_str,
+    expected_led4,
+):
+    """Button 4 with PowerView hub: toggles boolean AND calls rest_command for each sched event.
+
+    The REST command is mocked via async_mock_service. We verify:
+    - input_boolean flips state
+    - rest_command.powerview_set_scheduled_event is called once per scheduled event
+    - each REST call targets the correct hub URL, event ID, and enabled value
+    - LED4 mode reflects the new opted-in state
+    """
+    topology = hass_topology
+    switch = topology.entities.switch_auto
+
+    if initial_boolean == "on":
+        await hass.services.async_call(
+            "input_boolean", "turn_on", {"entity_id": switch}, blocking=True
+        )
+
+    # Update sensor to match initial state
+    sensor_data = [
+        {"id": 48860, "enabled": initial_sensor_enabled, "sceneId": 36156},
+        {"id": 21095, "enabled": initial_sensor_enabled, "sceneId": 16652},
+        {"id": 56009, "enabled": initial_sensor_enabled, "sceneId": 46041},
+    ]
+    hass.states.async_set("sensor.powerview_scheduled_events", "3", {"scheduledEventData": sensor_data})
+
+    await load_blueprint(topology.device, topology.labels, powerview_hub=topology.powerview_device)
+
+    zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
+    rest_calls = async_mock_service(hass, "rest_command", "powerview_set_scheduled_event")
+
+    _fire_button(hass, topology.device.id, "Scene 004")
+    await hass.async_block_till_done()
+
+    # Boolean toggled
+    assert hass.states.get(switch).state == expected_new_boolean, \
+        f"input_boolean should have toggled to '{expected_new_boolean}'"
+
+    # One REST call per scheduled event (3 events)
+    assert len(rest_calls) == 3, \
+        f"expected 3 REST calls (one per sched event), got {len(rest_calls)}"
+    called_ids = {c.data["id"] for c in rest_calls}
+    assert called_ids == {48860, 21095, 56009}, \
+        f"expected calls for IDs 48860, 21095, 56009, got {called_ids}"
+    for call in rest_calls:
+        assert call.data["hub"] == "http://192.168.4.22", \
+            f"hub URL should be base URL without path, got {call.data['hub']}"
+        assert str(call.data["enabled"]) == expected_enabled_str, \
+            f"enabled should be '{expected_enabled_str}', got {call.data['enabled']}"
+
+    # LED4 mode reflects new state
+    actual = {c.data["parameter"]: c.data["value"] for c in zwave_calls}
+    assert actual.get(ZEN35Param.LED4_MODE) == expected_led4, \
+        f"LED4 mode: expected {expected_led4}, got {actual.get(ZEN35Param.LED4_MODE)}"
+
+
+async def test_init_sets_led4_from_powerview_sensor(
+    hass,
+    hass_topology,
+    load_blueprint,
+):
+    """On init with PowerView hub, LED4 mode reflects the sensor's current enabled state.
+
+    When all scheduled events are disabled (opted out), LED4 should be ON (red).
+    """
+    topology = hass_topology
+
+    # Overwrite sensor: all events disabled → opted out
+    hass.states.async_set(
+        "sensor.powerview_scheduled_events",
+        "3",
+        {
+            "scheduledEventData": [
+                {"id": 48860, "enabled": False, "sceneId": 36156},
+                {"id": 21095, "enabled": False, "sceneId": 16652},
+                {"id": 56009, "enabled": False, "sceneId": 46041},
+            ]
+        },
+    )
+
+    await load_blueprint(topology.device, topology.labels, powerview_hub=topology.powerview_device)
+
+    zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
+
+    hass.bus.async_fire("automation_reloaded")
+    await hass.async_block_till_done()
+
+    # 5 color params + 1 LED4 mode param
+    assert len(zwave_calls) == 6, \
+        f"expected 6 zwave calls on init with powerview (5 colors + LED4 mode), got {len(zwave_calls)}"
+    actual = {c.data["parameter"]: c.data["value"] for c in zwave_calls}
+    assert actual.get(ZEN35Param.LED4_MODE) == LEDState.ON, \
+        "LED4 mode should be ON (red) when all events are disabled (opted out)"
+
+
+async def test_init_sets_led4_off_when_powerview_enabled(
+    hass,
+    hass_topology,
+    load_blueprint,
+):
+    """On init with PowerView hub, LED4 is OFF when all events are enabled (opted in)."""
+    topology = hass_topology
+    # Topology already seeds sensor with all events enabled
+
+    await load_blueprint(topology.device, topology.labels, powerview_hub=topology.powerview_device)
+
+    zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
+
+    hass.bus.async_fire("automation_reloaded")
+    await hass.async_block_till_done()
+
+    assert len(zwave_calls) == 6, \
+        f"expected 6 zwave calls on init with powerview (5 colors + LED4 mode), got {len(zwave_calls)}"
+    actual = {c.data["parameter"]: c.data["value"] for c in zwave_calls}
+    assert actual.get(ZEN35Param.LED4_MODE) == LEDState.OFF, \
+        "LED4 mode should be OFF when all events are enabled (opted in)"
+
+
+async def test_button4_without_powerview_no_rest_calls(
+    hass,
+    hass_topology,
+    load_blueprint,
+    zwave_calls,
+):
+    """Backward compat: without powerview_hub, button 4 only toggles the boolean — no REST calls."""
+    topology = hass_topology
+    rest_calls = async_mock_service(hass, "rest_command", "powerview_set_scheduled_event")
+
+    await load_blueprint(topology.device, topology.labels)  # no powerview_hub
+
+    _fire_button(hass, topology.device.id, "Scene 004")
+    await hass.async_block_till_done()
+
+    assert len(rest_calls) == 0, \
+        f"no REST calls expected when powerview_hub is not configured, got {len(rest_calls)}"
+    assert hass.states.get(topology.entities.switch_auto).state == "on", \
+        "input_boolean should still toggle when powerview_hub is not configured"

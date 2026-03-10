@@ -7,6 +7,7 @@ import pytest
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.components import automation
 from homeassistant.setup import async_setup_component
+from homeassistant.helpers import device_registry as dr
 
 
 class ZEN35Param(IntEnum):
@@ -83,6 +84,27 @@ def mock_zwave_config_entry(hass) -> ConfigEntry:
 
 
 @pytest.fixture
+def mock_powerview_config_entry(hass) -> ConfigEntry:
+    entry = ConfigEntry(
+        version=1,
+        domain="hunterdouglas_powerview",
+        title="PowerView Hub",
+        data={},
+        options={},
+        entry_id="test-powerview",
+        state=ConfigEntryState.LOADED,
+        source="integration_discovery",
+        minor_version=1,
+        unique_id="mock_powerview",
+        discovery_keys=set(),
+        subentries_data={},
+    )
+    hass.config_entries._entries[entry.entry_id] = entry
+    yield entry
+    hass.config_entries._entries.pop(entry.entry_id, None)
+
+
+@pytest.fixture
 def load_blueprint(hass, copy_blueprint_to_config):
     """Load the blueprint into HA. Accepts a Labels namedtuple from hass_topology."""
 
@@ -92,7 +114,19 @@ def load_blueprint(hass, copy_blueprint_to_config):
         *,
         led_theme="default",
         confirm_timeout=0,
+        powerview_hub=None,
     ):
+        inputs = {
+            "zen35_device": device.id,
+            "label_fully_open": labels.open,
+            "label_partially_open": labels.partial,
+            "label_fully_close": labels.closed,
+            "label_central_control": labels.auto,
+            "led_theme": led_theme,
+            "confirm_timeout": confirm_timeout,
+        }
+        if powerview_hub is not None:
+            inputs["powerview_hub"] = powerview_hub.id
         assert await async_setup_component(
             hass,
             automation.DOMAIN,
@@ -100,15 +134,7 @@ def load_blueprint(hass, copy_blueprint_to_config):
                 automation.DOMAIN: {
                     "use_blueprint": {
                         "path": BLUEPRINT_PATH,
-                        "input": {
-                            "zen35_device": device.id,
-                            "label_fully_open": labels.open,
-                            "label_partially_open": labels.partial,
-                            "label_fully_close": labels.closed,
-                            "label_central_control": labels.auto,
-                            "led_theme": led_theme,
-                            "confirm_timeout": confirm_timeout,
-                        },
+                        "input": inputs,
                     }
                 }
             },

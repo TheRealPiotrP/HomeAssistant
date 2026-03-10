@@ -11,7 +11,7 @@ from homeassistant.helpers import (
 )
 from homeassistant.setup import async_setup_component
 
-Topology = namedtuple("Topology", ["device", "areas", "labels", "entities"])
+Topology = namedtuple("Topology", ["device", "areas", "labels", "entities", "powerview_device"])
 Areas = namedtuple("Areas", ["living_room", "kitchen"])
 Labels = namedtuple("Labels", ["open", "partial", "closed", "auto"])
 Entities = namedtuple(
@@ -34,7 +34,7 @@ Entities = namedtuple(
 
 
 @pytest.fixture
-async def hass_topology(hass, mock_zwave_config_entry):
+async def hass_topology(hass, mock_zwave_config_entry, mock_powerview_config_entry):
     """Set up a standard entity topology for integration tests.
 
     Uses real HA components throughout so no service mocking is needed:
@@ -65,6 +65,11 @@ async def hass_topology(hass, mock_zwave_config_entry):
         closed=label_closed.label_id,
         auto=label_auto.label_id,
     )
+    # Scheduled event label IDs — assigned directly to entities (no label registry entry
+    # needed because labels() template reads raw strings from entity registry)
+    sched_label_open = "powerview.scheduledEvent_id.48860"
+    sched_label_partial = "powerview.scheduledEvent_id.21095"
+    sched_label_closed = "powerview.scheduledEvent_id.56009"
 
     # 3. Create ZEN35 Device in Living Room
     device = dev_reg.async_get_or_create(
@@ -73,6 +78,14 @@ async def hass_topology(hass, mock_zwave_config_entry):
         name="ZEN35 Switch",
     )
     device = dev_reg.async_update_device(device.id, area_id=areas.living_room.id)
+
+    # PowerView hub device (configuration_url is used by blueprint to derive hub base URL)
+    powerview_device = dev_reg.async_get_or_create(
+        config_entry_id=mock_powerview_config_entry.entry_id,
+        identifiers={("hunterdouglas_powerview", "00:26:74:60:31:FD")},
+        name="PowerView Hub",
+        configuration_url="http://192.168.4.22/api/shades",
+    )
 
     # 4. Set up real input_boolean entities.
     #    Each scene targets one dedicated boolean so activating it changes
@@ -137,17 +150,23 @@ async def hass_topology(hass, mock_zwave_config_entry):
     # 6. Assign areas and labels via entity registry.
     scene_open_entry = ent_reg.async_get("scene.living_room_open")
     ent_reg.async_update_entity(
-        scene_open_entry.entity_id, area_id=areas.living_room.id, labels={labels.open}
+        scene_open_entry.entity_id,
+        area_id=areas.living_room.id,
+        labels={labels.open, sched_label_open},
     )
 
     scene_partial_entry = ent_reg.async_get("scene.living_room_partial")
     ent_reg.async_update_entity(
-        scene_partial_entry.entity_id, area_id=areas.living_room.id, labels={labels.partial}
+        scene_partial_entry.entity_id,
+        area_id=areas.living_room.id,
+        labels={labels.partial, sched_label_partial},
     )
 
     scene_closed_entry = ent_reg.async_get("scene.living_room_closed")
     ent_reg.async_update_entity(
-        scene_closed_entry.entity_id, area_id=areas.living_room.id, labels={labels.closed}
+        scene_closed_entry.entity_id,
+        area_id=areas.living_room.id,
+        labels={labels.closed, sched_label_closed},
     )
 
     noise_kitchen_entry = ent_reg.async_get("scene.kitchen_open")
@@ -168,10 +187,24 @@ async def hass_topology(hass, mock_zwave_config_entry):
 
     await hass.async_block_till_done()
 
+    # Seed the PowerView scheduled events sensor (all enabled = opted in)
+    hass.states.async_set(
+        "sensor.powerview_scheduled_events",
+        "3",
+        {
+            "scheduledEventData": [
+                {"id": 48860, "enabled": True, "sceneId": 36156},
+                {"id": 21095, "enabled": True, "sceneId": 16652},
+                {"id": 56009, "enabled": True, "sceneId": 46041},
+            ]
+        },
+    )
+
     return Topology(
         device=device,
         areas=areas,
         labels=labels,
+        powerview_device=powerview_device,
         entities=Entities(
             scene_open=scene_open_entry.entity_id,
             scene_partial=scene_partial_entry.entity_id,

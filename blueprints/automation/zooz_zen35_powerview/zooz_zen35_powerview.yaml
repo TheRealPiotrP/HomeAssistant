@@ -72,6 +72,18 @@ blueprint:
           max: 60
           unit_of_measurement: seconds
 
+    powerview_hub:
+      name: PowerView Hub (optional)
+      description: >
+        Select the Hunter Douglas PowerView hub device to enable toggling
+        scheduled events via button 4. Leave empty if you only use the
+        input_boolean toggle.
+      default: ""
+      selector:
+        device:
+          filter:
+            - integration: hunterdouglas_powerview
+
 mode: restart
 
 variables:
@@ -82,6 +94,7 @@ variables:
   label_central_control: !input label_central_control
   led_theme: !input led_theme
   confirm_timeout: !input confirm_timeout
+  powerview_hub: !input powerview_hub
 
 trigger:
   - platform: event
@@ -120,6 +133,26 @@ action:
       led_color_b1: "{{ 1 if led_theme == 'rainbow' else 0 }}"
       led_color_b2: "{{ 2 if led_theme == 'rainbow' else 0 }}"
       led_color_b3: "{{ 5 if led_theme == 'rainbow' else 0 }}"
+      # PowerView hub base URL (empty string when no hub is configured)
+      hub_url: >
+        {{ device_attr(powerview_hub, 'configuration_url').split('/api/')[0]
+           if powerview_hub else '' }}
+      # Scheduled event IDs for scenes in this area (empty list when no hub)
+      room_sched_ids: >
+        {% if powerview_hub and area_id %}
+          {% set ns = namespace(ids=[]) %}
+          {% for entity in area_entities(area_id) | select('search', '^scene\.') %}
+            {% set sched_label = labels(entity)
+                | select('match', 'powerview\\.scheduledEvent_id\\..*')
+                | first | default('') %}
+            {% if sched_label %}
+              {% set ns.ids = ns.ids + [sched_label | replace('powerview.scheduledEvent_id.', '') | int] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.ids }}
+        {% else %}
+          []
+        {% endif %}
 
   - choose:
       # Initialization: apply theme colors to all LEDs
@@ -155,6 +188,22 @@ action:
             data:
               parameter: 10
               value: 3
+          - if: "{{ room_sched_ids | length > 0 }}"
+            then:
+              - variables:
+                  init_all_events: >
+                    {{ state_attr('sensor.powerview_scheduled_events', 'scheduledEventData') | default([]) }}
+                  init_room_events: >
+                    {{ init_all_events | selectattr('id', 'in', room_sched_ids) | list }}
+                  init_opted_in: >
+                    {{ init_room_events | length > 0 and
+                       init_room_events | rejectattr('enabled') | list | length == 0 }}
+              - service: zwave_js.set_config_parameter
+                target:
+                  device_id: "{{ device_id }}"
+                data:
+                  parameter: 5
+                  value: "{{ 2 if init_opted_in else 3 }}"
 
 
       # Button 1 (Scene 001) – Fully open
@@ -310,15 +359,39 @@ action:
               parameter: 1
               value: 2
 
-      # Button 4 (Scene 004) – Toggle central control
+      # Button 4 (Scene 004) – Toggle central control / PowerView scheduled events
       - conditions:
           - "{{ scene_id == 'Scene 004' }}"
           - "{{ scene_value == 'KeyPressed' }}"
-          - "{{ entities_central_control | length > 0 }}"
+          - "{{ entities_central_control | length > 0 or room_sched_ids | length > 0 }}"
         sequence:
-          - service: input_boolean.toggle
-            target:
-              entity_id: "{{ entities_central_control }}"
+          - variables:
+              current_opted_in: >
+                {% if entities_central_control | length > 0 %}
+                  {{ states(entities_central_control | first) == 'on' }}
+                {% elif room_sched_ids | length > 0 %}
+                  {% set all_events = state_attr('sensor.powerview_scheduled_events', 'scheduledEventData') | default([]) %}
+                  {% set room_events = all_events | selectattr('id', 'in', room_sched_ids) | list %}
+                  {{ room_events | length > 0 and room_events | rejectattr('enabled') | list | length == 0 }}
+                {% else %}
+                  false
+                {% endif %}
+              new_opted_in: "{{ not current_opted_in }}"
+          - if: "{{ entities_central_control | length > 0 }}"
+            then:
+              - service: input_boolean.toggle
+                target:
+                  entity_id: "{{ entities_central_control }}"
+          - if: "{{ room_sched_ids | length > 0 }}"
+            then:
+              - repeat:
+                  for_each: "{{ room_sched_ids }}"
+                  sequence:
+                    - service: rest_command.powerview_set_scheduled_event
+                      data:
+                        hub: "{{ hub_url }}"
+                        id: "{{ repeat.item }}"
+                        enabled: "{{ new_opted_in | lower }}"
           - service: zwave_js.set_config_parameter
             target:
               device_id: "{{ device_id }}"
@@ -337,21 +410,19 @@ action:
             data:
               parameter: 4
               value: 2
-          # In confirm mode, blink white when toggling on; otherwise use red theme color
+          # In confirm mode, blink white when opting in; otherwise use red theme color
           - service: zwave_js.set_config_parameter
             target:
               device_id: "{{ device_id }}"
             data:
               parameter: 10
-              value: >
-                {{ 0 if (confirm_timeout > 0 and states(entities_central_control | first) == 'on') else 3 }}
+              value: "{{ 0 if (confirm_timeout > 0 and new_opted_in) else 3 }}"
           - service: zwave_js.set_config_parameter
             target:
               device_id: "{{ device_id }}"
             data:
               parameter: 5
-              value: >
-                {{ 2 if (confirm_timeout == 0 and states(entities_central_control | first) == 'on') else 3 }}
+              value: "{{ 2 if (confirm_timeout == 0 and new_opted_in) else 3 }}"
           - if: "{{ confirm_timeout > 0 }}"
             then:
               - delay:
