@@ -22,21 +22,31 @@ blueprint:
 
     label_fully_open:
       name: Label for "fully open" scenes
-      description: Label you attach to PowerView scenes that fully open shades.
+      description: >
+        Label you attach to PowerView scenes that fully open shades.
+        HA bug: dots in label names are stored as underscores (e.g. "powerview.scenes.open"
+        becomes "powerview_scenes_open"). If the selector shows "Unknown item", open the
+        dropdown and re-select the label to pick up the correct ID.
       default: powerview_scenes_open
       selector:
         label:
 
     label_partially_open:
       name: Label for "partially open" scenes
-      description: Label for scenes that partially open shades.
+      description: >
+        Label for scenes that partially open shades.
+        HA bug: dots in label names are stored as underscores. If the selector shows
+        "Unknown item", open the dropdown and re-select the label to pick up the correct ID.
       default: powerview_scenes_partially_open
       selector:
         label:
 
     label_fully_close:
       name: Label for "fully close" scenes
-      description: Label for scenes that fully close shades.
+      description: >
+        Label for scenes that fully close shades.
+        HA bug: dots in label names are stored as underscores. If the selector shows
+        "Unknown item", open the dropdown and re-select the label to pick up the correct ID.
       default: powerview_scenes_closed
       selector:
         label:
