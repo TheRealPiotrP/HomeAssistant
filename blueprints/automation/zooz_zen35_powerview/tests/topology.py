@@ -100,6 +100,7 @@ async def hass_topology(hass, mock_zwave_config_entry, sim_powerview_hub):
             ]
         },
     ), "REST sensor setup failed — is the sim hub running?"
+    await hass.async_block_till_done()  # ensure entity is registered before polling
     # Force an immediate poll so sensor attributes are populated before any test runs.
     await hass.services.async_call(
         "homeassistant", "update_entity",
