@@ -17,14 +17,13 @@ from .simulations import SimulatedPowerViewHub
 
 Topology = namedtuple("Topology", ["zen35_device", "areas", "labels", "entities", "powerview_device"])
 Areas = namedtuple("Areas", ["living_room", "kitchen"])
-Labels = namedtuple("Labels", ["open", "partial", "closed", "auto"])
+Labels = namedtuple("Labels", ["open", "partial", "closed"])
 Entities = namedtuple(
     "Entities",
     [
         "scene_open",
         "scene_partial",
         "scene_closed",
-        "switch_auto",
         "noise_scene_kitchen",
         "noise_scene_no_label",
     ],
@@ -58,12 +57,10 @@ async def hass_topology(hass, mock_zwave_config_entry, sim_powerview_hub):
     label_open    = label_reg.async_create("Blinds Open")
     label_partial = label_reg.async_create("Blinds Partial")
     label_closed  = label_reg.async_create("Blinds Closed")
-    label_auto    = label_reg.async_create("Automated Mode")
     labels = Labels(
         open=label_open.label_id,
         partial=label_partial.label_id,
         closed=label_closed.label_id,
-        auto=label_auto.label_id,
     )
     # Scheduled event label IDs — assigned directly to entities (no label registry entry
     # needed because labels() template reads raw strings from entity registry)
@@ -144,15 +141,7 @@ async def hass_topology(hass, mock_zwave_config_entry, sim_powerview_hub):
         identifiers={("hunterdouglas_powerview", "SIMHUB001")}
     )
 
-    # 7. Set up the central-control input_boolean (button 4 target).
-    await async_setup_component(
-        hass,
-        "input_boolean",
-        {"input_boolean": {"living_room_blinds_central": {}}},
-    )
-    await hass.async_block_till_done()
-
-    # 8. Assign areas and labels to the PowerView scene entities.
+    # 7. Assign areas and labels to the PowerView scene entities.
     scene_open_entry    = ent_reg.async_get("scene.open")
     scene_partial_entry = ent_reg.async_get("scene.partial")
     scene_closed_entry  = ent_reg.async_get("scene.closed")
@@ -184,13 +173,6 @@ async def hass_topology(hass, mock_zwave_config_entry, sim_powerview_hub):
         area_id=areas.living_room.id,
         # intentionally no label
     )
-
-    switch_auto_entry = ent_reg.async_get("input_boolean.living_room_blinds_central")
-    ent_reg.async_update_entity(
-        switch_auto_entry.entity_id,
-        area_id=areas.living_room.id,
-        labels={labels.auto},
-    )
     await hass.async_block_till_done()
 
     # 9. Set up real rest_command for PowerView scheduled event control.
@@ -219,7 +201,6 @@ async def hass_topology(hass, mock_zwave_config_entry, sim_powerview_hub):
             scene_open=scene_open_entry.entity_id,
             scene_partial=scene_partial_entry.entity_id,
             scene_closed=scene_closed_entry.entity_id,
-            switch_auto=switch_auto_entry.entity_id,
             noise_scene_kitchen=noise_kitchen_entry.entity_id,
             noise_scene_no_label=noise_no_label_entry.entity_id,
         ),

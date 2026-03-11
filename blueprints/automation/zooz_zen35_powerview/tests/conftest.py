@@ -119,7 +119,6 @@ def load_blueprint(hass, copy_blueprint_to_config):
             "label_fully_open": labels.open,
             "label_partially_open": labels.partial,
             "label_fully_close": labels.closed,
-            "label_central_control": labels.auto,
             "led_theme": led_theme,
             "confirm_timeout": confirm_timeout,
         }

@@ -4,7 +4,7 @@ blueprint:
     Auto-configure ZEN35 switches to control Hunter Douglas PowerView blinds
     via scenes. Uses area + labels for zero manual entity selection.
     Big button controls load; Buttons 1–3 activate scenes (fully open,
-    partially open, fully close); Button 4 toggles central-control mode.
+    partially open, fully close); Button 4 toggles PowerView scheduled events.
     LEDs: active scene button stays on, others off. Assign labels, put ZEN35
     and entities in the same area, and the blueprint discovers them.
   domain: automation
@@ -41,13 +41,6 @@ blueprint:
       selector:
         label:
 
-    label_central_control:
-      name: Label for central-control input_boolean
-      description: Label for the helper that enables central blinds automation.
-      default: powerview.automated
-      selector:
-        label:
-
     led_theme:
       name: LED Color Theme
       description: Color scheme for the scene button LEDs.
@@ -76,8 +69,7 @@ blueprint:
       name: PowerView Hub (optional)
       description: >
         Select the Hunter Douglas PowerView hub device to enable toggling
-        scheduled events via button 4. Leave empty if you only use the
-        input_boolean toggle.
+        scheduled events via button 4. Without a hub, button 4 does nothing.
       default: ""
       selector:
         device:
@@ -91,7 +83,6 @@ variables:
   label_fully_open: !input label_fully_open
   label_partially_open: !input label_partially_open
   label_fully_close: !input label_fully_close
-  label_central_control: !input label_central_control
   led_theme: !input led_theme
   confirm_timeout: !input confirm_timeout
   powerview_hub: !input powerview_hub
@@ -125,9 +116,6 @@ action:
       entities_fully_close: >
         {% set aid = device_attr(device_id, 'area_id') %}
         {{ (label_entities(label_fully_close) | select('in', area_entities(aid)) | list) if aid else [] }}
-      entities_central_control: >
-        {% set aid = device_attr(device_id, 'area_id') %}
-        {{ (label_entities(label_central_control) | select('in', area_entities(aid)) | select('search', 'input_boolean.') | list) if aid else [] }}
       # LED colors derived from theme (button 4 is always red = 3)
       led_color_load: "{{ 6 if led_theme == 'rainbow' else 0 }}"
       led_color_b1: "{{ 1 if led_theme == 'rainbow' else 0 }}"
@@ -363,35 +351,22 @@ action:
       - conditions:
           - "{{ scene_id == 'Scene 004' }}"
           - "{{ scene_value == 'KeyPressed' }}"
-          - "{{ entities_central_control | length > 0 or room_sched_ids | length > 0 }}"
+          - "{{ room_sched_ids | length > 0 }}"
         sequence:
           - variables:
               current_opted_in: >
-                {% if entities_central_control | length > 0 %}
-                  {{ states(entities_central_control | first) == 'on' }}
-                {% elif room_sched_ids | length > 0 %}
-                  {% set all_events = state_attr('sensor.powerview_scheduled_events', 'scheduledEventData') | default([]) %}
-                  {% set room_events = all_events | selectattr('id', 'in', room_sched_ids) | list %}
-                  {{ room_events | length > 0 and room_events | rejectattr('enabled') | list | length == 0 }}
-                {% else %}
-                  false
-                {% endif %}
+                {% set all_events = state_attr('sensor.powerview_scheduled_events', 'scheduledEventData') | default([]) %}
+                {% set room_events = all_events | selectattr('id', 'in', room_sched_ids) | list %}
+                {{ room_events | length > 0 and room_events | rejectattr('enabled') | list | length == 0 }}
               new_opted_in: "{{ not current_opted_in }}"
-          - if: "{{ entities_central_control | length > 0 }}"
-            then:
-              - service: input_boolean.toggle
-                target:
-                  entity_id: "{{ entities_central_control }}"
-          - if: "{{ room_sched_ids | length > 0 }}"
-            then:
-              - repeat:
-                  for_each: "{{ room_sched_ids }}"
-                  sequence:
-                    - service: rest_command.powerview_set_scheduled_event
-                      data:
-                        hub: "{{ hub_url }}"
-                        id: "{{ repeat.item }}"
-                        enabled: "{{ new_opted_in | lower }}"
+          - repeat:
+              for_each: "{{ room_sched_ids }}"
+              sequence:
+                - service: rest_command.powerview_set_scheduled_event
+                  data:
+                    hub: "{{ hub_url }}"
+                    id: "{{ repeat.item }}"
+                    enabled: "{{ new_opted_in | lower }}"
           - service: zwave_js.set_config_parameter
             target:
               device_id: "{{ device_id }}"
