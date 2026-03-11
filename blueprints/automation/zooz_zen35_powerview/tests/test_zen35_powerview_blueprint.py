@@ -10,7 +10,7 @@ tests assert on hub state (scene activations, scheduled event toggles) directly.
 import pytest
 from homeassistant.helpers import device_registry as dr
 
-from .conftest import ZEN35Param, LEDState, LEDColor
+from .conftest import LEDColor, LEDState, ZEN35Param
 from .simulations import SimulatedPowerViewHub as Hub
 
 
@@ -87,8 +87,8 @@ async def test_scene_button_activates_scene_and_sets_leds(
     assert sim_zen35.total_calls == len(expected_params), \
         f"Expected {len(expected_params)} LED calls, got {sim_zen35.total_calls}"
     for param, value in expected_params.items():
-        assert sim_zen35.get_param(device_id, param) == value, \
-            f"{button_id} param {param}: expected {value}, got {sim_zen35.get_param(device_id, param)}"
+        got = sim_zen35.get_param(device_id, param)
+        assert got == value, f"{button_id} param {param}: expected {value}, got {got}"
 
     # LED4 must not be touched by scene buttons
     assert sim_zen35.get_param(device_id, ZEN35Param.LED4_MODE) is None
@@ -142,8 +142,8 @@ async def test_init_sets_led_colors(
     await hass.async_block_till_done()
 
     for param, value in expected_colors.items():
-        assert sim_zen35.get_param(device_id, param) == value, \
-            f"{led_theme}: param {param} expected {value}, got {sim_zen35.get_param(device_id, param)}"
+        got = sim_zen35.get_param(device_id, param)
+        assert got == value, f"{led_theme}: param {param} expected {value}, got {got}"
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +229,8 @@ async def test_scene_with_right_label_but_wrong_area_is_not_activated(
 @pytest.mark.parametrize(
     "button_id",
     ["Scene 001", "Scene 002", "Scene 003", "Scene 004", "Scene 005"],
-    ids=["button1-no_area", "button2-no_area", "button3-no_area", "button4-no_area", "load-no_area"],
+    ids=["button1-no_area", "button2-no_area", "button3-no_area", "button4-no_area",
+         "load-no_area"],
 )
 async def test_button_does_nothing_when_device_has_no_area(
     hass,
@@ -392,8 +393,9 @@ async def test_button4_confirm_mode_led_turns_off_after_timeout(
     assert sim_zen35.get_param(device_id, ZEN35Param.LED4_COLOR) == expected_led4_color
 
     # LED4 mode went ON (flash) then OFF (timeout)
-    assert sim_zen35.param_history(device_id, ZEN35Param.LED4_MODE) == [LEDState.ON, LEDState.OFF], \
-        "LED4 must go ON then OFF after confirm timeout"
+    assert sim_zen35.param_history(device_id, ZEN35Param.LED4_MODE) == [
+        LEDState.ON, LEDState.OFF
+    ], "LED4 must go ON then OFF after confirm timeout"
 
 
 # ---------------------------------------------------------------------------
@@ -414,8 +416,9 @@ async def test_load_button_confirm_mode_led_turns_on_then_off(
     _fire_button(hass, device_id, "Scene 005")
     await hass.async_block_till_done()
 
-    assert sim_zen35.param_history(device_id, ZEN35Param.LOAD_MODE) == [LEDState.ON, LEDState.OFF], \
-        "load LED must go ON then OFF in confirm mode"
+    assert sim_zen35.param_history(device_id, ZEN35Param.LOAD_MODE) == [
+        LEDState.ON, LEDState.OFF
+    ], "load LED must go ON then OFF in confirm mode"
 
 
 async def test_rapid_double_press_not_dropped(

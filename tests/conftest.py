@@ -1,14 +1,15 @@
 """Pytest fixtures for ZEN35 PowerView blueprint tests."""
-from pathlib import Path
 import shutil
+from pathlib import Path
 
 import pytest
-from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
-from homeassistant.const import CONF_NAME
+from homeassistant.core import HomeAssistant
 
 # Blueprint path relative to repo root
-BLUEPRINT_DIR = Path(__file__).resolve().parent.parent / "blueprints" / "automation" / "zooz_zen35_powerview"
+BLUEPRINT_DIR = (
+    Path(__file__).resolve().parent.parent / "blueprints" / "automation" / "zooz_zen35_powerview"
+)
 BLUEPRINT_PATH = "zooz_zen35_powerview/zooz_zen35_powerview.yaml"
 
 
@@ -21,7 +22,9 @@ def auto_enable_custom_integrations(enable_custom_integrations):
 @pytest.fixture
 def copy_blueprint_to_config(hass):
     """Copy the ZEN35 PowerView blueprint into the HA config dir so it can be loaded."""
-    blueprint_dest = Path(hass.config.config_dir) / "blueprints" / "automation" / "zooz_zen35_powerview"
+    blueprint_dest = (
+        Path(hass.config.config_dir) / "blueprints" / "automation" / "zooz_zen35_powerview"
+    )
     blueprint_dest.mkdir(parents=True, exist_ok=True)
     shutil.copy2(
         BLUEPRINT_DIR / "zooz_zen35_powerview.yaml",
