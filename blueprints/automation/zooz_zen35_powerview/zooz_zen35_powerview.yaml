@@ -23,21 +23,21 @@ blueprint:
     label_fully_open:
       name: Label for "fully open" scenes
       description: Label you attach to PowerView scenes that fully open shades.
-      default: powerview.scenes.open
+      default: powerview_scenes_open
       selector:
         label:
 
     label_partially_open:
       name: Label for "partially open" scenes
       description: Label for scenes that partially open shades.
-      default: powerview.scenes.partially_open
+      default: powerview_scenes_partially_open
       selector:
         label:
 
     label_fully_close:
       name: Label for "fully close" scenes
       description: Label for scenes that fully close shades.
-      default: powerview.scenes.closed
+      default: powerview_scenes_closed
       selector:
         label:
 
