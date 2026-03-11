@@ -1,19 +1,23 @@
 """Pytest fixture for creating a standard Home Assistant topology."""
 
 from collections import namedtuple
-import pytest
 
+import pytest
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
-from homeassistant.const import CONF_HOST, CONF_API_VERSION
+from homeassistant.const import CONF_API_VERSION, CONF_HOST
 from homeassistant.helpers import (
     area_registry as ar,
+)
+from homeassistant.helpers import (
     device_registry as dr,
+)
+from homeassistant.helpers import (
     entity_registry as er,
+)
+from homeassistant.helpers import (
     label_registry as lr,
 )
 from homeassistant.setup import async_setup_component
-
-from .simulations import SimulatedPowerViewHub
 
 Topology = namedtuple("Topology", ["zen35_device", "areas", "labels", "entities"])
 Areas = namedtuple("Areas", ["living_room", "kitchen"])

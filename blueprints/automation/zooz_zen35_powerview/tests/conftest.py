@@ -1,14 +1,14 @@
 """Local fixtures for the ZEN35 PowerView blueprint tests."""
-from pathlib import Path
 import shutil
 from enum import IntEnum
+from pathlib import Path
 
 import pytest
-from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.components import automation
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.setup import async_setup_component
 
-from .simulations import SimulatedZEN35, SimulatedPowerViewHub
+from .simulations import SimulatedPowerViewHub, SimulatedZEN35
 
 
 class ZEN35Param(IntEnum):
