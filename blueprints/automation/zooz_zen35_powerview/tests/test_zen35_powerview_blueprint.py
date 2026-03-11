@@ -220,25 +220,6 @@ async def test_scene_with_right_label_but_wrong_area_is_not_activated(
             f"{button_id}: Kitchen scene must activate when device is in Kitchen"
 
 
-async def test_button4_without_powerview_does_nothing(
-    hass,
-    hass_topology,
-    load_blueprint,
-    sim_zen35,
-    sim_powerview_hub,
-):
-    """Button 4 without powerview_hub configured — whole sequence is a no-op."""
-    topology = hass_topology
-    await load_blueprint(topology.zen35_device, topology.labels)  # no powerview_hub
-
-    _fire_button(hass, topology.zen35_device.id, "Scene 004")
-    await hass.async_block_till_done()
-
-    assert sim_zen35.total_calls == 0, \
-        f"no LED calls expected when button 4 condition fails, got {sim_zen35.total_calls}"
-    for event_id in (48860, 21095, 56009):
-        assert sim_powerview_hub.get_event(event_id)["enabled"] is True, \
-            f"event {event_id}: hub must not be modified when powerview_hub is not configured"
 
 
 # ---------------------------------------------------------------------------
@@ -407,10 +388,7 @@ async def test_button4_confirm_mode_led_turns_off_after_timeout(
             blocking=True,
         )
 
-    await load_blueprint(
-        topology.zen35_device, topology.labels,
-        powerview_hub=topology.powerview_device, confirm_timeout=0.001,
-    )
+    await load_blueprint(topology.zen35_device, topology.labels, confirm_timeout=0.001)
 
     _fire_button(hass, device_id, "Scene 004")
     await hass.async_block_till_done()
@@ -461,10 +439,7 @@ async def test_rapid_double_press_not_dropped(
     """
     topology = hass_topology
     device_id = topology.zen35_device.id
-    await load_blueprint(
-        topology.zen35_device, topology.labels,
-        powerview_hub=topology.powerview_device, confirm_timeout=0.001,
-    )
+    await load_blueprint(topology.zen35_device, topology.labels, confirm_timeout=0.001)
 
     _fire_button(hass, device_id, "Scene 004")
     _fire_button(hass, device_id, "Scene 004")
@@ -542,7 +517,7 @@ async def test_button4_powerview_toggles_scheduled_events(
             blocking=True,
         )
 
-    await load_blueprint(topology.zen35_device, topology.labels, powerview_hub=topology.powerview_device)
+    await load_blueprint(topology.zen35_device, topology.labels)
 
     _fire_button(hass, device_id, "Scene 004")
     await hass.async_block_till_done()
@@ -587,7 +562,7 @@ async def test_init_sets_led4_from_powerview_sensor(
     )
     await hass.async_block_till_done()
 
-    await load_blueprint(topology.zen35_device, topology.labels, powerview_hub=topology.powerview_device)
+    await load_blueprint(topology.zen35_device, topology.labels)
 
     hass.bus.async_fire("automation_reloaded")
     await hass.async_block_till_done()
@@ -608,7 +583,7 @@ async def test_init_sets_led4_off_when_powerview_enabled(
     device_id = topology.zen35_device.id
     # Topology seeds hub with all enabled; REST sensor polled during topology setup.
 
-    await load_blueprint(topology.zen35_device, topology.labels, powerview_hub=topology.powerview_device)
+    await load_blueprint(topology.zen35_device, topology.labels)
 
     hass.bus.async_fire("automation_reloaded")
     await hass.async_block_till_done()
@@ -617,23 +592,3 @@ async def test_init_sets_led4_off_when_powerview_enabled(
         "LED4 must be OFF when all events are enabled (opted in)"
 
 
-async def test_button4_without_powerview_no_hub_state_change(
-    hass,
-    hass_topology,
-    load_blueprint,
-    sim_zen35,
-    sim_powerview_hub,
-):
-    """Without powerview_hub, button 4 is a complete no-op: no LEDs, no hub changes."""
-    topology = hass_topology
-
-    await load_blueprint(topology.zen35_device, topology.labels)  # no powerview_hub
-
-    _fire_button(hass, topology.zen35_device.id, "Scene 004")
-    await hass.async_block_till_done()
-
-    assert sim_zen35.total_calls == 0, \
-        f"no LED calls expected when powerview_hub is not configured, got {sim_zen35.total_calls}"
-    for event_id in (48860, 21095, 56009):
-        assert sim_powerview_hub.get_event(event_id)["enabled"] is True, \
-            f"event {event_id}: hub must not be modified when powerview_hub is not configured"

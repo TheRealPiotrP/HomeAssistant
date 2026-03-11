@@ -112,7 +112,6 @@ def load_blueprint(hass, copy_blueprint_to_config):
         *,
         led_theme="default",
         confirm_timeout=0,
-        powerview_hub=None,
     ):
         inputs = {
             "zen35_device": device.id,
@@ -122,8 +121,6 @@ def load_blueprint(hass, copy_blueprint_to_config):
             "led_theme": led_theme,
             "confirm_timeout": confirm_timeout,
         }
-        if powerview_hub is not None:
-            inputs["powerview_hub"] = powerview_hub.id
         assert await async_setup_component(
             hass,
             automation.DOMAIN,

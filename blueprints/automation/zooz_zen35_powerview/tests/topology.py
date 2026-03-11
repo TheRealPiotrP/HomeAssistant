@@ -15,7 +15,7 @@ from homeassistant.setup import async_setup_component
 
 from .simulations import SimulatedPowerViewHub
 
-Topology = namedtuple("Topology", ["zen35_device", "areas", "labels", "entities", "powerview_device"])
+Topology = namedtuple("Topology", ["zen35_device", "areas", "labels", "entities"])
 Areas = namedtuple("Areas", ["living_room", "kitchen"])
 Labels = namedtuple("Labels", ["open", "partial", "closed"])
 Entities = namedtuple(
@@ -196,7 +196,6 @@ async def hass_topology(hass, mock_zwave_config_entry, sim_powerview_hub):
         zen35_device=device,
         areas=areas,
         labels=labels,
-        powerview_device=powerview_device,
         entities=Entities(
             scene_open=scene_open_entry.entity_id,
             scene_partial=scene_partial_entry.entity_id,

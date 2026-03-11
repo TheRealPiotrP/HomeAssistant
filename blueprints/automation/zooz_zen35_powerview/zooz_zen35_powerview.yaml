@@ -75,17 +75,6 @@ blueprint:
           max: 60
           unit_of_measurement: seconds
 
-    powerview_hub:
-      name: PowerView Hub (optional)
-      description: >
-        Select the Hunter Douglas PowerView hub device to enable toggling
-        scheduled events via button 4. Without a hub, button 4 does nothing.
-      default: ""
-      selector:
-        device:
-          filter:
-            - integration: hunterdouglas_powerview
-
 mode: restart
 
 variables:
@@ -95,7 +84,6 @@ variables:
   label_fully_close: !input label_fully_close
   led_theme: !input led_theme
   confirm_timeout: !input confirm_timeout
-  powerview_hub: !input powerview_hub
 
 trigger:
   - platform: event
@@ -131,13 +119,19 @@ action:
       led_color_b1: "{{ 1 if led_theme == 'rainbow' else 0 }}"
       led_color_b2: "{{ 2 if led_theme == 'rainbow' else 0 }}"
       led_color_b3: "{{ 5 if led_theme == 'rainbow' else 0 }}"
-      # PowerView hub base URL (empty string when no hub is configured)
+      # PowerView hub base URL — auto-discovered from the hunterdouglas_powerview integration.
+      # Empty string when the integration is not loaded.
       hub_url: >
-        {{ device_attr(powerview_hub, 'configuration_url').split('/api/')[0]
-           if powerview_hub else '' }}
+        {% set pv_ents = integration_entities('hunterdouglas_powerview') %}
+        {% if pv_ents %}
+          {% set cfg = device_attr(pv_ents | first, 'configuration_url') | default('') %}
+          {{ cfg.split('/api/')[0] if cfg else '' }}
+        {% else %}
+          ''
+        {% endif %}
       # Scheduled event IDs for scenes in this area (empty list when no hub)
       room_sched_ids: >
-        {% if powerview_hub and area_id %}
+        {% if hub_url and area_id %}
           {% set ns = namespace(ids=[]) %}
           {% for entity in area_entities(area_id) | select('search', '^scene[.]') %}
             {% set sched_label = labels(entity)
