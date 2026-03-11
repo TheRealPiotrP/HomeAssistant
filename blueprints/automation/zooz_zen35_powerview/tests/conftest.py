@@ -7,7 +7,8 @@ import pytest
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.components import automation
 from homeassistant.setup import async_setup_component
-from homeassistant.helpers import device_registry as dr
+
+from .simulations import SimulatedZEN35, SimulatedPowerViewHub
 
 
 class ZEN35Param(IntEnum):
@@ -83,25 +84,22 @@ def mock_zwave_config_entry(hass) -> ConfigEntry:
     hass.config_entries._entries.pop(entry.entry_id, None)
 
 
+
 @pytest.fixture
-def mock_powerview_config_entry(hass) -> ConfigEntry:
-    entry = ConfigEntry(
-        version=1,
-        domain="hunterdouglas_powerview",
-        title="PowerView Hub",
-        data={},
-        options={},
-        entry_id="test-powerview",
-        state=ConfigEntryState.LOADED,
-        source="integration_discovery",
-        minor_version=1,
-        unique_id="mock_powerview",
-        discovery_keys=set(),
-        subentries_data={},
-    )
-    hass.config_entries._entries[entry.entry_id] = entry
-    yield entry
-    hass.config_entries._entries.pop(entry.entry_id, None)
+def sim_zen35(hass) -> SimulatedZEN35:
+    """Simulated ZEN35: registers a real zwave_js.set_config_parameter service
+    and records parameter state for assertion by tests."""
+    return SimulatedZEN35(hass)
+
+
+@pytest.fixture
+async def sim_powerview_hub(socket_enabled) -> SimulatedPowerViewHub:
+    """Simulated PowerView hub HTTP server on 127.0.0.1 (allowed by pytest-socket).
+    Seeds initial state with all events enabled (opted in)."""
+    hub = SimulatedPowerViewHub()
+    await hub.start()
+    yield hub
+    await hub.stop()
 
 
 @pytest.fixture

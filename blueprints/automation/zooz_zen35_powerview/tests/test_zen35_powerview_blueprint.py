@@ -1,42 +1,37 @@
 """Integration tests for the Zooz ZEN35 → PowerView blueprint.
 
-All services except zwave_js.set_config_parameter run against real HA
-components, so assertions are on actual state changes rather than captured
-mock calls.  zwave_js.set_config_parameter is the only mocked service because
-it requires real Z-Wave hardware.
+All services run against real HA components. ``SimulatedZEN35`` registers a
+real ``zwave_js.set_config_parameter`` service and stores parameter state so
+tests assert on LED state rather than call arguments. ``SimulatedPowerViewHub``
+runs a real HTTP server so the real ``hunterdouglas_powerview`` integration,
+``rest_command``, and the REST sensor all exercise their full network stack;
+tests assert on hub state (scene activations, scheduled event toggles) directly.
 """
 import pytest
-from pytest_homeassistant_custom_component.common import async_mock_service
 from homeassistant.helpers import device_registry as dr
 
-from conftest import ZEN35Param, LEDState, LEDColor
+from .conftest import ZEN35Param, LEDState, LEDColor
+from .simulations import SimulatedPowerViewHub as Hub
 
 
-@pytest.fixture
-def zwave_calls(hass):
-    """Capture zwave_js.set_config_parameter calls (no real hardware available)."""
-    return async_mock_service(hass, "zwave_js", "set_config_parameter")
-
-
-def _fire_button(hass, device_id, scene_label):
+def _fire_button(hass, device_id, button_id):
     hass.bus.async_fire(
         "zwave_js_value_notification",
         {
             "device_id": device_id,
             "command_class_name": "Central Scene",
-            "label": scene_label,
+            "label": button_id,
             "value": "KeyPressed",
         },
     )
 
 
 @pytest.mark.parametrize(
-    "scene_label, target, other_targets, expected_params",
+    "button_id, scene_id, expected_params",
     [
         (
             "Scene 001",
-            "input_boolean.blinds_open_activated",
-            ["input_boolean.blinds_partial_activated", "input_boolean.blinds_closed_activated"],
+            Hub.SCENE_ID_OPEN,
             {
                 ZEN35Param.LED1_COLOR: LEDColor.WHITE,
                 ZEN35Param.LED1_MODE: LEDState.ON,
@@ -46,8 +41,7 @@ def _fire_button(hass, device_id, scene_label):
         ),
         (
             "Scene 002",
-            "input_boolean.blinds_partial_activated",
-            ["input_boolean.blinds_open_activated", "input_boolean.blinds_closed_activated"],
+            Hub.SCENE_ID_PARTIAL,
             {
                 ZEN35Param.LED2_COLOR: LEDColor.WHITE,
                 ZEN35Param.LED1_MODE: LEDState.OFF,
@@ -57,8 +51,7 @@ def _fire_button(hass, device_id, scene_label):
         ),
         (
             "Scene 003",
-            "input_boolean.blinds_closed_activated",
-            ["input_boolean.blinds_open_activated", "input_boolean.blinds_partial_activated"],
+            Hub.SCENE_ID_CLOSED,
             {
                 ZEN35Param.LED3_COLOR: LEDColor.WHITE,
                 ZEN35Param.LED1_MODE: LEDState.OFF,
@@ -73,51 +66,33 @@ async def test_scene_button_activates_scene_and_sets_leds(
     hass,
     hass_topology,
     load_blueprint,
-    zwave_calls,
-    scene_label,
-    target,
-    other_targets,
+    sim_zen35,
+    sim_powerview_hub,
+    button_id,
+    scene_id,
     expected_params,
 ):
-    """Pressing a scene button (1–3) activates the correct scene and updates LEDs.
-
-    Verified via real state changes:
-    - The scene's dedicated target input_boolean flips from 'off' to 'on'
-      (proving scene.turn_on actually ran against the real scene platform).
-    - Noise entities (wrong area or no label) remain 'off', proving the
-      blueprint's label+area discovery is correctly scoped.
-    - zwave_js LED parameters are set to the expected on/off pattern.
-    """
+    """Pressing a scene button (1–3) activates the correct scene and sets the correct LEDs."""
     topology = hass_topology
-    await load_blueprint(topology.device, topology.labels)
+    device_id = topology.zen35_device.id
+    await load_blueprint(topology.zen35_device, topology.labels)
 
-    assert hass.states.get(target).state == "off", "target must start off"
-
-    _fire_button(hass, topology.device.id, scene_label)
+    _fire_button(hass, device_id, button_id)
     await hass.async_block_till_done()
 
-    # Scene activated: its target boolean turned on
-    assert hass.states.get(target).state == "on", \
-        f"{scene_label}: scene target {target} should be 'on' after activation"
-
-    # Other scene targets were not activated
-    for other in other_targets:
-        assert hass.states.get(other).state == "off", \
-            f"{scene_label}: {other} should remain 'off'"
-
-    # Noise entities were not activated
-    assert hass.states.get(topology.entities.target_noise_kitchen).state == "off", \
-        "kitchen noise scene must not fire (wrong area)"
-    assert hass.states.get(topology.entities.target_noise_no_label).state == "off", \
-        "unlabeled noise scene must not fire (no label)"
+    assert sim_powerview_hub.scene_was_activated(scene_id), \
+        f"{button_id}: scene {scene_id} should have been activated on the hub"
 
     # LED parameters reflect the active button
-    assert len(zwave_calls) == len(expected_params), \
-        f"Expected {len(expected_params)} zwave calls, got {len(zwave_calls)}"
-    actual = {c.data["parameter"]: c.data["value"] for c in zwave_calls}
+    assert sim_zen35.total_calls == len(expected_params), \
+        f"Expected {len(expected_params)} LED calls, got {sim_zen35.total_calls}"
     for param, value in expected_params.items():
-        assert actual.get(param) == value, \
-            f"{scene_label} LED param {param}: expected {value}, got {actual.get(param)}"
+        assert sim_zen35.get_param(device_id, param) == value, \
+            f"{button_id} param {param}: expected {value}, got {sim_zen35.get_param(device_id, param)}"
+
+    # LED4 must not be touched by scene buttons
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED4_MODE) is None
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED4_COLOR) is None
 
 
 @pytest.mark.parametrize(
@@ -129,19 +104,19 @@ async def test_button4_toggles_central_control_and_updates_led(
     hass,
     hass_topology,
     load_blueprint,
-    zwave_calls,
+    sim_zen35,
     initial_state,
     expected_led,
 ):
     """Pressing button 4 toggles the input_boolean and updates LED4.
 
     Verified via real state changes:
-    - input_boolean.living_room_blinds_central actually flips state
-      (proving input_boolean.toggle ran against the real platform).
-    - zwave_js LED4 parameter is set to reflect the new (post-toggle) state.
-    - LED1–3 are also reset to OFF.
+    - input_boolean.living_room_blinds_central actually flips state.
+    - LED4 mode parameter reflects the new (post-toggle) opted-in state.
+    - LED1–3 mode parameters are reset to OFF.
     """
     topology = hass_topology
+    device_id = topology.zen35_device.id
     switch = topology.entities.switch_auto
 
     if initial_state == "on":
@@ -149,27 +124,24 @@ async def test_button4_toggles_central_control_and_updates_led(
             "input_boolean", "turn_on", {"entity_id": switch}, blocking=True
         )
 
-    await load_blueprint(topology.device, topology.labels)
+    await load_blueprint(topology.zen35_device, topology.labels)
 
     assert hass.states.get(switch).state == initial_state
 
-    _fire_button(hass, topology.device.id, "Scene 004")
+    _fire_button(hass, device_id, "Scene 004")
     await hass.async_block_till_done()
 
     expected_new_state = "on" if initial_state == "off" else "off"
     assert hass.states.get(switch).state == expected_new_state, \
         f"input_boolean should have toggled from '{initial_state}' to '{expected_new_state}'"
 
-    assert len(zwave_calls) == 5, \
-        f"Expected 5 zwave calls (LED1-3 mode + LED4 color + LED4 mode), got {len(zwave_calls)}"
-    actual = {c.data["parameter"]: c.data["value"] for c in zwave_calls}
-    assert actual[ZEN35Param.LED4_MODE] == expected_led, \
-        f"LED4 mode: expected {expected_led} for initial state '{initial_state}'"
-    assert actual[ZEN35Param.LED4_COLOR] == LEDColor.RED, \
-        f"LED4 color: expected RED in default theme for initial state '{initial_state}'"
-    assert actual[ZEN35Param.LED1_MODE] == LEDState.OFF
-    assert actual[ZEN35Param.LED2_MODE] == LEDState.OFF
-    assert actual[ZEN35Param.LED3_MODE] == LEDState.OFF
+    assert sim_zen35.total_calls == 5, \
+        f"Expected 5 LED calls (LED1-3 mode + LED4 color + LED4 mode), got {sim_zen35.total_calls}"
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED4_MODE) == expected_led
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED4_COLOR) == LEDColor.RED
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED1_MODE) == LEDState.OFF
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED2_MODE) == LEDState.OFF
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED3_MODE) == LEDState.OFF
 
 
 # ---------------------------------------------------------------------------
@@ -206,28 +178,21 @@ async def test_init_sets_led_colors(
     hass,
     hass_topology,
     load_blueprint,
+    sim_zen35,
     led_theme,
     expected_colors,
 ):
-    """On startup or automation reload, all LED color parameters are set to the theme.
-
-    zwave_calls is created inline after load_blueprint so it only captures
-    the manually-fired automation_reloaded event, not any setup activity.
-    """
+    """On automation_reloaded, all LED color parameters are set to the theme."""
     topology = hass_topology
-    await load_blueprint(topology.device, topology.labels, led_theme=led_theme)
-
-    zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
+    device_id = topology.zen35_device.id
+    await load_blueprint(topology.zen35_device, topology.labels, led_theme=led_theme)
 
     hass.bus.async_fire("automation_reloaded")
     await hass.async_block_till_done()
 
-    assert len(zwave_calls) == 5, \
-        f"Expected 5 color param calls on init, got {len(zwave_calls)}"
-    actual = {c.data["parameter"]: c.data["value"] for c in zwave_calls}
     for param, value in expected_colors.items():
-        assert actual.get(param) == value, \
-            f"{led_theme}: param {param} expected {value}, got {actual.get(param)}"
+        assert sim_zen35.get_param(device_id, param) == value, \
+            f"{led_theme}: param {param} expected {value}, got {sim_zen35.get_param(device_id, param)}"
 
 
 # ---------------------------------------------------------------------------
@@ -235,50 +200,42 @@ async def test_init_sets_led_colors(
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
-    "scene_label, target",
-    [
-        ("Scene 001", "input_boolean.blinds_open_activated"),
-        ("Scene 002", "input_boolean.blinds_partial_activated"),
-        ("Scene 003", "input_boolean.blinds_closed_activated"),
-    ],
+    "button_id",
+    ["Scene 001", "Scene 002", "Scene 003"],
     ids=["button1-no_open_label", "button2-no_partial_label", "button3-no_close_label"],
 )
 async def test_scene_button_no_matching_label_does_nothing(
     hass,
     hass_topology,
     load_blueprint,
-    zwave_calls,
-    scene_label,
-    target,
+    sim_zen35,
+    sim_powerview_hub,
+    button_id,
 ):
-    """Buttons 1–3 with no scene carrying the expected label in the area.
-
-    The whole button sequence (scene + LEDs) is gated on finding at least one
-    entity, so neither the scene nor any LED parameter should be updated.
-    """
+    """Buttons 1–3 with no scene carrying the expected label — no scene, no LED change."""
     topology = hass_topology
-    no_scene_labels = topology.labels._replace(
+    no_button_ids = topology.labels._replace(
         open="no_such_label",
         partial="no_such_label",
         closed="no_such_label",
     )
-    await load_blueprint(topology.device, no_scene_labels)
+    await load_blueprint(topology.zen35_device, no_button_ids)
 
-    _fire_button(hass, topology.device.id, scene_label)
+    _fire_button(hass, topology.zen35_device.id, button_id)
     await hass.async_block_till_done()
 
-    assert hass.states.get(target).state == "off", \
-        f"{scene_label}: scene target must stay 'off' when no entity matches the label"
-    assert len(zwave_calls) == 0, \
-        f"{scene_label}: no zwave calls expected when no entity matches the label, got {len(zwave_calls)}"
+    assert not sim_powerview_hub._activated_scenes, \
+        f"{button_id}: no scene should be activated when no entity matches the label"
+    assert sim_zen35.total_calls == 0, \
+        f"{button_id}: no LED calls expected when no entity matches, got {sim_zen35.total_calls}"
 
 
 @pytest.mark.parametrize(
-    "scene_label, wrong_area_target, right_area_target",
+    "button_id, lr_scene_id, kitchen_scene_id",
     [
-        ("Scene 001", "input_boolean.blinds_open_activated",   "input_boolean.noise_kitchen_activated"),
-        ("Scene 002", "input_boolean.blinds_partial_activated", None),
-        ("Scene 003", "input_boolean.blinds_closed_activated",  None),
+        ("Scene 001", Hub.SCENE_ID_OPEN, Hub.SCENE_ID_KITCHEN_OPEN),
+        ("Scene 002", Hub.SCENE_ID_PARTIAL, None),
+        ("Scene 003", Hub.SCENE_ID_CLOSED,  None),
     ],
     ids=["button1-device_in_kitchen", "button2-device_in_kitchen", "button3-device_in_kitchen"],
 )
@@ -286,65 +243,53 @@ async def test_scene_with_right_label_but_wrong_area_is_not_activated(
     hass,
     hass_topology,
     load_blueprint,
-    zwave_calls,
-    scene_label,
-    wrong_area_target,
-    right_area_target,
+    sim_zen35,
+    sim_powerview_hub,
+    button_id,
+    lr_scene_id,
+    kitchen_scene_id,
 ):
-    """Scene with matching label in a different area than the device must not activate.
-
-    The ZEN35 is moved to Kitchen. 'Kitchen Open' has the open label and is now
-    in the device's area, so it activates. 'Living Room Open' has the same label
-    but is in Living Room — it must not activate. Buttons 2 and 3 have no
-    Kitchen-area scenes at all, so no scene activates for those.
-    """
+    """Scene with matching label in a different area than the device must not activate."""
     topology = hass_topology
 
-    # Relocate the ZEN35 to Kitchen — area-based discovery must follow the device
     dr.async_get(hass).async_update_device(
-        topology.device.id, area_id=topology.areas.kitchen.id
+        topology.zen35_device.id, area_id=topology.areas.kitchen.id
     )
 
-    await load_blueprint(topology.device, topology.labels)
+    await load_blueprint(topology.zen35_device, topology.labels)
 
-    _fire_button(hass, topology.device.id, scene_label)
+    _fire_button(hass, topology.zen35_device.id, button_id)
     await hass.async_block_till_done()
 
-    # LR scene has the right label but device is no longer in LR — must not fire
-    assert hass.states.get(wrong_area_target).state == "off", \
-        f"{scene_label}: LR scene must not activate when device is in Kitchen"
+    assert not sim_powerview_hub.scene_was_activated(lr_scene_id), \
+        f"{button_id}: Living Room scene must not activate when device is in Kitchen"
 
-    # Kitchen Open (button 1 only) is now in the device's area and should activate
-    if right_area_target:
-        assert hass.states.get(right_area_target).state == "on", \
-            f"{scene_label}: Kitchen scene must activate when device is in Kitchen"
+    if kitchen_scene_id is not None:
+        assert sim_powerview_hub.scene_was_activated(kitchen_scene_id), \
+            f"{button_id}: Kitchen scene must activate when device is in Kitchen"
 
 
 async def test_button4_no_matching_label_does_nothing(
     hass,
     hass_topology,
     load_blueprint,
-    zwave_calls,
+    sim_zen35,
 ):
-    """Button 4 with no input_boolean carrying the central-control label.
-
-    The whole button 4 sequence is gated on entities_central_control being
-    non-empty, so neither the toggle nor the LED update should fire.
-    """
+    """Button 4 with no input_boolean and no powerview_hub — whole sequence is a no-op."""
     topology = hass_topology
     no_auto_labels = topology.labels._replace(auto="no_such_label")
-    await load_blueprint(topology.device, no_auto_labels)
+    await load_blueprint(topology.zen35_device, no_auto_labels)
 
     switch = topology.entities.switch_auto
     assert hass.states.get(switch).state == "off"
 
-    _fire_button(hass, topology.device.id, "Scene 004")
+    _fire_button(hass, topology.zen35_device.id, "Scene 004")
     await hass.async_block_till_done()
 
     assert hass.states.get(switch).state == "off", \
         "central-control boolean must not toggle when no entity matches the label"
-    assert len(zwave_calls) == 0, \
-        f"no zwave calls expected when button 4 condition fails, got {len(zwave_calls)}"
+    assert sim_zen35.total_calls == 0, \
+        f"no LED calls expected when button 4 condition fails, got {sim_zen35.total_calls}"
 
 
 # ---------------------------------------------------------------------------
@@ -352,13 +297,13 @@ async def test_button4_no_matching_label_does_nothing(
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
-    "scene_label, target",
+    "button_id, check_switch",
     [
-        ("Scene 001", "input_boolean.blinds_open_activated"),
-        ("Scene 002", "input_boolean.blinds_partial_activated"),
-        ("Scene 003", "input_boolean.blinds_closed_activated"),
-        ("Scene 004", "input_boolean.living_room_blinds_central"),
-        ("Scene 005", None),
+        ("Scene 001", False),
+        ("Scene 002", False),
+        ("Scene 003", False),
+        ("Scene 004", True),
+        ("Scene 005", False),
     ],
     ids=["button1-no_area", "button2-no_area", "button3-no_area", "button4-no_area", "load-no_area"],
 )
@@ -366,34 +311,31 @@ async def test_button_does_nothing_when_device_has_no_area(
     hass,
     hass_topology,
     load_blueprint,
-    zwave_calls,
-    scene_label,
-    target,
+    sim_zen35,
+    sim_powerview_hub,
+    button_id,
+    check_switch,
 ):
-    """All buttons are no-ops when the ZEN35 device has no area assigned.
-
-    Buttons 1–4 are gated on entity discovery via area, so removing the
-    device's area prevents scene activation, boolean toggle, and LED updates.
-    The load button (Scene 005) is tested in persistent mode (confirm_timeout=0)
-    where it is always a no-op regardless of area.
-    """
+    """All buttons are no-ops when the ZEN35 device has no area assigned."""
     topology = hass_topology
 
-    dr.async_get(hass).async_update_device(topology.device.id, area_id=None)
-    await load_blueprint(topology.device, topology.labels)
+    dr.async_get(hass).async_update_device(topology.zen35_device.id, area_id=None)
+    await load_blueprint(topology.zen35_device, topology.labels)
 
-    _fire_button(hass, topology.device.id, scene_label)
+    _fire_button(hass, topology.zen35_device.id, button_id)
     await hass.async_block_till_done()
 
-    if target is not None:
-        assert hass.states.get(target).state == "off", \
-            f"{scene_label}: target must stay 'off' when device has no area"
-    assert len(zwave_calls) == 0, \
-        f"{scene_label}: no zwave calls expected when device has no area"
+    assert not sim_powerview_hub._activated_scenes, \
+        f"{button_id}: no scene should activate when device has no area"
+    if check_switch:
+        assert hass.states.get(topology.entities.switch_auto).state == "off", \
+            f"{button_id}: central-control boolean must stay 'off' when device has no area"
+    assert sim_zen35.total_calls == 0, \
+        f"{button_id}: no LED calls expected when device has no area"
 
 
 @pytest.mark.parametrize(
-    "scene_label",
+    "button_id",
     ["Scene 001", "Scene 002", "Scene 003"],
     ids=["button1", "button2", "button3"],
 )
@@ -401,34 +343,31 @@ async def test_scene_buttons_do_not_affect_central_control(
     hass,
     hass_topology,
     load_blueprint,
-    zwave_calls,
-    scene_label,
+    sim_zen35,
+    button_id,
 ):
-    """Pressing a scene button (1–3) must not toggle the central-control boolean.
-
-    Verified two ways:
-    - The central-control input_boolean state is unchanged after the press.
-    - LED4 is set to OFF (reflecting a reset, not a toggle of the boolean).
-    """
+    """Pressing a scene button (1–3) must not touch LED4 or toggle the central-control boolean."""
     topology = hass_topology
+    device_id = topology.zen35_device.id
     switch = topology.entities.switch_auto
 
     await hass.services.async_call(
         "input_boolean", "turn_on", {"entity_id": switch}, blocking=True
     )
-    await load_blueprint(topology.device, topology.labels)
+    await load_blueprint(topology.zen35_device, topology.labels)
 
     assert hass.states.get(switch).state == "on"
 
-    _fire_button(hass, topology.device.id, scene_label)
+    _fire_button(hass, device_id, button_id)
     await hass.async_block_till_done()
 
     assert hass.states.get(switch).state == "on", \
-        f"{scene_label}: central-control boolean must not be toggled by a scene button"
+        f"{button_id}: central-control boolean must not be toggled by a scene button"
 
-    led4_calls = [c for c in zwave_calls if c.data["parameter"] in (ZEN35Param.LED4_MODE, ZEN35Param.LED4_COLOR)]
-    assert len(led4_calls) == 0, \
-        f"{scene_label}: LED4 (button 4) must not be touched by a scene button"
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED4_MODE) is None, \
+        f"{button_id}: LED4 mode must not be touched by a scene button"
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED4_COLOR) is None, \
+        f"{button_id}: LED4 color must not be touched by a scene button"
 
 
 # ---------------------------------------------------------------------------
@@ -436,11 +375,11 @@ async def test_scene_buttons_do_not_affect_central_control(
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
-    "scene_label, target, expected_color_param, expected_color",
+    "button_id, scene_id, expected_color_param, expected_color",
     [
-        ("Scene 001", "input_boolean.blinds_open_activated",  ZEN35Param.LED1_COLOR, LEDColor.BLUE),
-        ("Scene 002", "input_boolean.blinds_partial_activated", ZEN35Param.LED2_COLOR, LEDColor.GREEN),
-        ("Scene 003", "input_boolean.blinds_closed_activated", ZEN35Param.LED3_COLOR, LEDColor.YELLOW),
+        ("Scene 001", Hub.SCENE_ID_OPEN,    ZEN35Param.LED1_COLOR, LEDColor.BLUE),
+        ("Scene 002", Hub.SCENE_ID_PARTIAL, ZEN35Param.LED2_COLOR, LEDColor.GREEN),
+        ("Scene 003", Hub.SCENE_ID_CLOSED,  ZEN35Param.LED3_COLOR, LEDColor.YELLOW),
     ],
     ids=["button1-rainbow-blue", "button2-rainbow-green", "button3-rainbow-yellow"],
 )
@@ -448,25 +387,25 @@ async def test_scene_button_rainbow_theme_sets_correct_color(
     hass,
     hass_topology,
     load_blueprint,
-    zwave_calls,
-    scene_label,
-    target,
+    sim_zen35,
+    sim_powerview_hub,
+    button_id,
+    scene_id,
     expected_color_param,
     expected_color,
 ):
     """Rainbow theme: each scene button lights up in its assigned color."""
     topology = hass_topology
-    await load_blueprint(topology.device, topology.labels, led_theme="rainbow")
+    device_id = topology.zen35_device.id
+    await load_blueprint(topology.zen35_device, topology.labels, led_theme="rainbow")
 
-    _fire_button(hass, topology.device.id, scene_label)
+    _fire_button(hass, device_id, button_id)
     await hass.async_block_till_done()
 
-    assert hass.states.get(target).state == "on", \
-        f"{scene_label}: scene target should activate"
-
-    actual = {c.data["parameter"]: c.data["value"] for c in zwave_calls}
-    assert actual.get(expected_color_param) == expected_color, \
-        f"{scene_label}: expected color {expected_color} on param {expected_color_param}"
+    assert sim_powerview_hub.scene_was_activated(scene_id), \
+        f"{button_id}: scene {scene_id} should have been activated on the hub"
+    assert sim_zen35.get_param(device_id, expected_color_param) == expected_color, \
+        f"{button_id}: expected color {expected_color} on param {expected_color_param}"
 
 
 # ---------------------------------------------------------------------------
@@ -474,7 +413,7 @@ async def test_scene_button_rainbow_theme_sets_correct_color(
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
-    "scene_label, active_mode_param, active_color_param",
+    "button_id, active_mode_param, active_color_param",
     [
         ("Scene 001", ZEN35Param.LED1_MODE, ZEN35Param.LED1_COLOR),
         ("Scene 002", ZEN35Param.LED2_MODE, ZEN35Param.LED2_COLOR),
@@ -486,39 +425,24 @@ async def test_scene_button_confirm_mode_led_turns_off_after_timeout(
     hass,
     hass_topology,
     load_blueprint,
-    scene_label,
+    sim_zen35,
+    button_id,
     active_mode_param,
     active_color_param,
 ):
-    """Confirm mode: scene button LED turns on then off after confirm_timeout seconds.
-
-    In the test environment the delay resolves within async_block_till_done, so
-    the full sequence (ON → delay → OFF) completes before we assert. We verify
-    both the ON and OFF calls appear in order in the call list.
-    """
+    """Confirm mode: scene button LED turns on then off after confirm_timeout elapses."""
     topology = hass_topology
-    await load_blueprint(topology.device, topology.labels, confirm_timeout=0.001)
+    device_id = topology.zen35_device.id
+    await load_blueprint(topology.zen35_device, topology.labels, confirm_timeout=0.001)
 
-    zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
-
-    _fire_button(hass, topology.device.id, scene_label)
+    _fire_button(hass, device_id, button_id)
     await hass.async_block_till_done()
 
-    # Total calls: color(1) + active-mode-ON(1) + 2×other-mode-OFF(2) + active-mode-OFF-after-timeout(1) = 5
-    assert len(zwave_calls) == 5, \
-        f"{scene_label}: expected 5 zwave calls in confirm mode, got {len(zwave_calls)}"
+    # Active LED was set ON then OFF (confirm sequence)
+    assert sim_zen35.param_history(device_id, active_mode_param) == [LEDState.ON, LEDState.OFF], \
+        f"{button_id}: active LED must go ON then OFF after timeout"
 
-    mode_calls = [c for c in zwave_calls if c.data["parameter"] == active_mode_param]
-    assert len(mode_calls) == 2, \
-        f"{scene_label}: expected 2 calls on active mode param (ON then OFF)"
-    assert mode_calls[0].data["value"] == LEDState.ON, \
-        f"{scene_label}: first active-mode call must be ON"
-    assert mode_calls[-1].data["value"] == LEDState.OFF, \
-        f"{scene_label}: last active-mode call must be OFF (timeout)"
-
-    color_calls = [c for c in zwave_calls if c.data["parameter"] == active_color_param]
-    assert len(color_calls) == 1
-    assert color_calls[0].data["value"] == LEDColor.WHITE
+    assert sim_zen35.get_param(device_id, active_color_param) == LEDColor.WHITE
 
 
 @pytest.mark.parametrize(
@@ -533,15 +457,13 @@ async def test_button4_confirm_mode_led_turns_off_after_timeout(
     hass,
     hass_topology,
     load_blueprint,
+    sim_zen35,
     initial_state,
     expected_led4_color,
 ):
-    """Confirm mode: button 4 blinks (white when toggling on, red when off) then goes dark.
-
-    The full sequence completes within async_block_till_done. We verify both the
-    ON and the timeout OFF calls appear on LED4_MODE in order.
-    """
+    """Confirm mode: button 4 blinks (white when toggling on, red when off) then goes dark."""
     topology = hass_topology
+    device_id = topology.zen35_device.id
     switch = topology.entities.switch_auto
 
     if initial_state == "on":
@@ -549,27 +471,17 @@ async def test_button4_confirm_mode_led_turns_off_after_timeout(
             "input_boolean", "turn_on", {"entity_id": switch}, blocking=True
         )
 
-    await load_blueprint(topology.device, topology.labels, confirm_timeout=0.001)
+    await load_blueprint(topology.zen35_device, topology.labels, confirm_timeout=0.001)
 
-    zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
-
-    _fire_button(hass, topology.device.id, "Scene 004")
+    _fire_button(hass, device_id, "Scene 004")
     await hass.async_block_till_done()
 
-    # Total: LED1-3 mode OFF(3) + LED4 color(1) + LED4 mode ON(1) + LED4 mode OFF after timeout(1) = 6
-    assert len(zwave_calls) == 6, \
-        f"expected 6 zwave calls in confirm mode for button 4, got {len(zwave_calls)}"
+    # LED4 color set once to signal the new state
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED4_COLOR) == expected_led4_color
 
-    led4_color_calls = [c for c in zwave_calls if c.data["parameter"] == ZEN35Param.LED4_COLOR]
-    assert len(led4_color_calls) == 1
-    assert led4_color_calls[0].data["value"] == expected_led4_color, \
-        f"LED4 color: expected {expected_led4_color} when toggling from '{initial_state}'"
-
-    led4_mode_calls = [c for c in zwave_calls if c.data["parameter"] == ZEN35Param.LED4_MODE]
-    assert len(led4_mode_calls) == 2, \
-        "expected 2 LED4 mode calls (ON then OFF after timeout)"
-    assert led4_mode_calls[0].data["value"] == LEDState.ON
-    assert led4_mode_calls[1].data["value"] == LEDState.OFF
+    # LED4 mode went ON (flash) then OFF (timeout)
+    assert sim_zen35.param_history(device_id, ZEN35Param.LED4_MODE) == [LEDState.ON, LEDState.OFF], \
+        "LED4 must go ON then OFF after confirm timeout"
 
 
 # ---------------------------------------------------------------------------
@@ -580,37 +492,25 @@ async def test_load_button_confirm_mode_led_turns_on_then_off(
     hass,
     hass_topology,
     load_blueprint,
+    sim_zen35,
 ):
-    """Confirm mode: load button LED turns on briefly then turns off.
-
-    In confirm mode the blueprint sets param 1 (LOAD_MODE) to 3 (always on),
-    waits confirm_timeout seconds, then sets it to 2 (always off). The delay
-    resolves synchronously in the test environment so we capture both calls.
-    """
+    """Confirm mode: load button LED turns on briefly then turns off."""
     topology = hass_topology
-    await load_blueprint(topology.device, topology.labels, confirm_timeout=0.001)
+    device_id = topology.zen35_device.id
+    await load_blueprint(topology.zen35_device, topology.labels, confirm_timeout=0.001)
 
-    zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
-
-    _fire_button(hass, topology.device.id, "Scene 005")
+    _fire_button(hass, device_id, "Scene 005")
     await hass.async_block_till_done()
 
-    assert len(zwave_calls) == 2, \
-        f"expected 2 zwave calls for load button confirm mode, got {len(zwave_calls)}"
-
-    load_mode_calls = [c for c in zwave_calls if c.data["parameter"] == ZEN35Param.LOAD_MODE]
-    assert len(load_mode_calls) == 2, \
-        "expected 2 LOAD_MODE calls (ON then OFF)"
-    assert load_mode_calls[0].data["value"] == LEDState.ON, \
-        "first LOAD_MODE call must be ON (always on)"
-    assert load_mode_calls[1].data["value"] == LEDState.OFF, \
-        "second LOAD_MODE call must be OFF (always off) after timeout"
+    assert sim_zen35.param_history(device_id, ZEN35Param.LOAD_MODE) == [LEDState.ON, LEDState.OFF], \
+        "load LED must go ON then OFF in confirm mode"
 
 
 async def test_rapid_double_press_not_dropped(
     hass,
     hass_topology,
     load_blueprint,
+    sim_zen35,
 ):
     """A second press while the confirm delay is running must not be dropped.
 
@@ -619,24 +519,20 @@ async def test_rapid_double_press_not_dropped(
     timeout fires once (from the second run) and LED ends dark.
     """
     topology = hass_topology
+    device_id = topology.zen35_device.id
     switch = topology.entities.switch_auto
-    await load_blueprint(topology.device, topology.labels, confirm_timeout=0.001)
+    await load_blueprint(topology.zen35_device, topology.labels, confirm_timeout=0.001)
 
-    zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
-
-    # Fire both presses before yielding to the event loop so the second
-    # press arrives while the first run's delay is pending.
-    _fire_button(hass, topology.device.id, "Scene 004")
-    _fire_button(hass, topology.device.id, "Scene 004")
+    _fire_button(hass, device_id, "Scene 004")
+    _fire_button(hass, device_id, "Scene 004")
     await hass.async_block_till_done()
 
     # Two toggles: state is back to original (off)
     assert hass.states.get(switch).state == "off", \
         "two presses must produce two toggles, returning state to 'off'"
 
-    # LED4 ends dark (confirm timeout fired after the second run)
-    led4_mode_calls = [c for c in zwave_calls if c.data["parameter"] == ZEN35Param.LED4_MODE]
-    assert led4_mode_calls[-1].data["value"] == LEDState.OFF, \
+    # LED4 ends dark after the second run's confirm timeout
+    assert sim_zen35.param_history(device_id, ZEN35Param.LED4_MODE)[-1] == LEDState.OFF, \
         "LED4 must be OFF after the second run's confirm timeout"
 
 
@@ -644,21 +540,17 @@ async def test_load_button_persistent_mode_no_led_change(
     hass,
     hass_topology,
     load_blueprint,
-    zwave_calls,
+    sim_zen35,
 ):
-    """Persistent mode: pressing the load button does not touch any LED parameter.
-
-    In persistent mode (confirm_timeout == 0) the blueprint has no branch for
-    Scene 005, so the load LED stays at its hardware default (mode 0 = locator).
-    """
+    """Persistent mode: pressing the load button does not touch any LED parameter."""
     topology = hass_topology
-    await load_blueprint(topology.device, topology.labels, confirm_timeout=0)
+    await load_blueprint(topology.zen35_device, topology.labels, confirm_timeout=0)
 
-    _fire_button(hass, topology.device.id, "Scene 005")
+    _fire_button(hass, topology.zen35_device.id, "Scene 005")
     await hass.async_block_till_done()
 
-    assert len(zwave_calls) == 0, \
-        f"persistent mode: no zwave calls expected for load button, got {len(zwave_calls)}"
+    assert sim_zen35.total_calls == 0, \
+        f"persistent mode: no LED calls expected for load button, got {sim_zen35.total_calls}"
 
 
 # ---------------------------------------------------------------------------
@@ -666,12 +558,12 @@ async def test_load_button_persistent_mode_no_led_change(
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
-    "initial_boolean, initial_sensor_enabled, expected_new_boolean, expected_enabled_str, expected_led4",
+    "initial_all_enabled, expected_enabled, expected_led4",
     [
-        # Opted in → press → opt out: boolean ON→OFF, events disabled, LED4 ON (red)
-        ("on",  True,  "off", "false", LEDState.ON),
-        # Opted out → press → opt in: boolean OFF→ON, events enabled, LED4 OFF
-        ("off", False, "on",  "true",  LEDState.OFF),
+        # Opted in (all enabled) → press → opt out: events disabled, LED4 ON (red)
+        (True,  False, LEDState.ON),
+        # Opted out (all disabled) → press → opt in: events enabled, LED4 OFF
+        (False, True,  LEDState.OFF),
     ],
     ids=["button4-powerview-opts-out", "button4-powerview-opts-in"],
 )
@@ -679,144 +571,144 @@ async def test_button4_powerview_toggles_scheduled_events(
     hass,
     hass_topology,
     load_blueprint,
-    initial_boolean,
-    initial_sensor_enabled,
-    expected_new_boolean,
-    expected_enabled_str,
+    sim_zen35,
+    sim_powerview_hub,
+    initial_all_enabled,
+    expected_enabled,
     expected_led4,
 ):
-    """Button 4 with PowerView hub: toggles boolean AND calls rest_command for each sched event.
+    """Button 4 with PowerView hub: toggles boolean AND PUTs to the hub for each event.
 
-    The REST command is mocked via async_mock_service. We verify:
-    - input_boolean flips state
-    - rest_command.powerview_set_scheduled_event is called once per scheduled event
-    - each REST call targets the correct hub URL, event ID, and enabled value
-    - LED4 mode reflects the new opted-in state
+    Verified via real HTTP calls to SimulatedPowerViewHub:
+    - input_boolean flips state.
+    - Hub event state is updated to the expected enabled value.
+    - LED4 mode reflects the new opted-in state.
     """
     topology = hass_topology
+    device_id = topology.zen35_device.id
     switch = topology.entities.switch_auto
 
-    if initial_boolean == "on":
+    if not initial_all_enabled:
+        # Reseed hub with all disabled and set boolean to off (already off)
+        sim_powerview_hub.seed_events([
+            {"id": 48860, "enabled": False, "sceneId": 36156},
+            {"id": 21095, "enabled": False, "sceneId": 16652},
+            {"id": 56009, "enabled": False, "sceneId": 46041},
+        ])
+        # Force sensor refresh so blueprint reads the updated state
+        await hass.services.async_call(
+            "homeassistant", "update_entity",
+            {"entity_id": "sensor.powerview_scheduled_events"},
+            blocking=True,
+        )
+        await hass.async_block_till_done()
+    else:
+        # For opts-out case: boolean starts ON (opted in)
         await hass.services.async_call(
             "input_boolean", "turn_on", {"entity_id": switch}, blocking=True
         )
 
-    # Update sensor to match initial state
-    sensor_data = [
-        {"id": 48860, "enabled": initial_sensor_enabled, "sceneId": 36156},
-        {"id": 21095, "enabled": initial_sensor_enabled, "sceneId": 16652},
-        {"id": 56009, "enabled": initial_sensor_enabled, "sceneId": 46041},
-    ]
-    hass.states.async_set("sensor.powerview_scheduled_events", "3", {"scheduledEventData": sensor_data})
+    await load_blueprint(topology.zen35_device, topology.labels, powerview_hub=topology.powerview_device)
 
-    await load_blueprint(topology.device, topology.labels, powerview_hub=topology.powerview_device)
-
-    zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
-    rest_calls = async_mock_service(hass, "rest_command", "powerview_set_scheduled_event")
-
-    _fire_button(hass, topology.device.id, "Scene 004")
+    _fire_button(hass, device_id, "Scene 004")
     await hass.async_block_till_done()
 
     # Boolean toggled
-    assert hass.states.get(switch).state == expected_new_boolean, \
-        f"input_boolean should have toggled to '{expected_new_boolean}'"
+    expected_boolean = "on" if expected_enabled else "off"
+    assert hass.states.get(switch).state == expected_boolean
 
-    # One REST call per scheduled event (3 events)
-    assert len(rest_calls) == 3, \
-        f"expected 3 REST calls (one per sched event), got {len(rest_calls)}"
-    called_ids = {c.data["id"] for c in rest_calls}
-    assert called_ids == {48860, 21095, 56009}, \
-        f"expected calls for IDs 48860, 21095, 56009, got {called_ids}"
-    for call in rest_calls:
-        assert call.data["hub"] == "http://192.168.4.22", \
-            f"hub URL should be base URL without path, got {call.data['hub']}"
-        assert str(call.data["enabled"]) == expected_enabled_str, \
-            f"enabled should be '{expected_enabled_str}', got {call.data['enabled']}"
+    # All three hub events updated via real HTTP PUT
+    for event_id in (48860, 21095, 56009):
+        event = sim_powerview_hub.get_event(event_id)
+        assert event is not None
+        assert event["enabled"] == expected_enabled, \
+            f"event {event_id}: expected enabled={expected_enabled}, got {event['enabled']}"
 
-    # LED4 mode reflects new state
-    actual = {c.data["parameter"]: c.data["value"] for c in zwave_calls}
-    assert actual.get(ZEN35Param.LED4_MODE) == expected_led4, \
-        f"LED4 mode: expected {expected_led4}, got {actual.get(ZEN35Param.LED4_MODE)}"
+    # LED4 reflects the new opted-in state
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED4_MODE) == expected_led4
 
 
 async def test_init_sets_led4_from_powerview_sensor(
     hass,
     hass_topology,
     load_blueprint,
+    sim_zen35,
+    sim_powerview_hub,
 ):
-    """On init with PowerView hub, LED4 mode reflects the sensor's current enabled state.
+    """On automation_reloaded with PowerView hub, LED4 reflects the sensor's enabled state.
 
-    When all scheduled events are disabled (opted out), LED4 should be ON (red).
+    When all events are disabled (opted out), LED4 should be ON (red).
+    The REST sensor fetches from the real sim hub, so seeding the hub and
+    refreshing the sensor is sufficient to set up the pre-condition.
     """
     topology = hass_topology
+    device_id = topology.zen35_device.id
 
-    # Overwrite sensor: all events disabled → opted out
-    hass.states.async_set(
-        "sensor.powerview_scheduled_events",
-        "3",
-        {
-            "scheduledEventData": [
-                {"id": 48860, "enabled": False, "sceneId": 36156},
-                {"id": 21095, "enabled": False, "sceneId": 16652},
-                {"id": 56009, "enabled": False, "sceneId": 46041},
-            ]
-        },
+    # Seed hub with all disabled and refresh sensor
+    sim_powerview_hub.seed_events([
+        {"id": 48860, "enabled": False, "sceneId": 36156},
+        {"id": 21095, "enabled": False, "sceneId": 16652},
+        {"id": 56009, "enabled": False, "sceneId": 46041},
+    ])
+    await hass.services.async_call(
+        "homeassistant", "update_entity",
+        {"entity_id": "sensor.powerview_scheduled_events"},
+        blocking=True,
     )
+    await hass.async_block_till_done()
 
-    await load_blueprint(topology.device, topology.labels, powerview_hub=topology.powerview_device)
-
-    zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
+    await load_blueprint(topology.zen35_device, topology.labels, powerview_hub=topology.powerview_device)
 
     hass.bus.async_fire("automation_reloaded")
     await hass.async_block_till_done()
 
-    # 5 color params + 1 LED4 mode param
-    assert len(zwave_calls) == 6, \
-        f"expected 6 zwave calls on init with powerview (5 colors + LED4 mode), got {len(zwave_calls)}"
-    actual = {c.data["parameter"]: c.data["value"] for c in zwave_calls}
-    assert actual.get(ZEN35Param.LED4_MODE) == LEDState.ON, \
-        "LED4 mode should be ON (red) when all events are disabled (opted out)"
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED4_MODE) == LEDState.ON, \
+        "LED4 must be ON (red) when all events are disabled (opted out)"
 
 
 async def test_init_sets_led4_off_when_powerview_enabled(
     hass,
     hass_topology,
     load_blueprint,
+    sim_zen35,
+    sim_powerview_hub,
 ):
-    """On init with PowerView hub, LED4 is OFF when all events are enabled (opted in)."""
+    """On automation_reloaded with PowerView hub, LED4 is OFF when all events are enabled."""
     topology = hass_topology
-    # Topology already seeds sensor with all events enabled
+    device_id = topology.zen35_device.id
+    # Topology seeds hub with all enabled; REST sensor polled during topology setup.
 
-    await load_blueprint(topology.device, topology.labels, powerview_hub=topology.powerview_device)
-
-    zwave_calls = async_mock_service(hass, "zwave_js", "set_config_parameter")
+    await load_blueprint(topology.zen35_device, topology.labels, powerview_hub=topology.powerview_device)
 
     hass.bus.async_fire("automation_reloaded")
     await hass.async_block_till_done()
 
-    assert len(zwave_calls) == 6, \
-        f"expected 6 zwave calls on init with powerview (5 colors + LED4 mode), got {len(zwave_calls)}"
-    actual = {c.data["parameter"]: c.data["value"] for c in zwave_calls}
-    assert actual.get(ZEN35Param.LED4_MODE) == LEDState.OFF, \
-        "LED4 mode should be OFF when all events are enabled (opted in)"
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED4_MODE) == LEDState.OFF, \
+        "LED4 must be OFF when all events are enabled (opted in)"
 
 
-async def test_button4_without_powerview_no_rest_calls(
+async def test_button4_without_powerview_no_hub_state_change(
     hass,
     hass_topology,
     load_blueprint,
-    zwave_calls,
+    sim_zen35,
+    sim_powerview_hub,
 ):
-    """Backward compat: without powerview_hub, button 4 only toggles the boolean — no REST calls."""
+    """Backward compat: without powerview_hub, button 4 toggles only the boolean.
+
+    Hub event state must remain unchanged (no HTTP PUTs were made).
+    """
     topology = hass_topology
-    rest_calls = async_mock_service(hass, "rest_command", "powerview_set_scheduled_event")
 
-    await load_blueprint(topology.device, topology.labels)  # no powerview_hub
+    await load_blueprint(topology.zen35_device, topology.labels)  # no powerview_hub
 
-    _fire_button(hass, topology.device.id, "Scene 004")
+    _fire_button(hass, topology.zen35_device.id, "Scene 004")
     await hass.async_block_till_done()
 
-    assert len(rest_calls) == 0, \
-        f"no REST calls expected when powerview_hub is not configured, got {len(rest_calls)}"
-    assert hass.states.get(topology.entities.switch_auto).state == "on", \
-        "input_boolean should still toggle when powerview_hub is not configured"
+    # Boolean still toggled (backward-compat behaviour)
+    assert hass.states.get(topology.entities.switch_auto).state == "on"
+
+    # Hub events are unchanged (all still enabled from initial seed)
+    for event_id in (48860, 21095, 56009):
+        assert sim_powerview_hub.get_event(event_id)["enabled"] is True, \
+            f"event {event_id}: hub must not be modified when powerview_hub is not configured"

@@ -141,7 +141,7 @@ action:
       room_sched_ids: >
         {% if powerview_hub and area_id %}
           {% set ns = namespace(ids=[]) %}
-          {% for entity in area_entities(area_id) | select('search', '^scene\.') %}
+          {% for entity in area_entities(area_id) | select('search', '^scene[.]') %}
             {% set sched_label = labels(entity)
                 | select('match', 'powerview\\.scheduledEvent_id\\..*')
                 | first | default('') %}

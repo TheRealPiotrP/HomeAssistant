@@ -3,6 +3,8 @@
 from collections import namedtuple
 import pytest
 
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.const import CONF_HOST, CONF_API_VERSION
 from homeassistant.helpers import (
     area_registry as ar,
     device_registry as dr,
@@ -11,7 +13,9 @@ from homeassistant.helpers import (
 )
 from homeassistant.setup import async_setup_component
 
-Topology = namedtuple("Topology", ["device", "areas", "labels", "entities", "powerview_device"])
+from .simulations import SimulatedPowerViewHub
+
+Topology = namedtuple("Topology", ["zen35_device", "areas", "labels", "entities", "powerview_device"])
 Areas = namedtuple("Areas", ["living_room", "kitchen"])
 Labels = namedtuple("Labels", ["open", "partial", "closed", "auto"])
 Entities = namedtuple(
@@ -23,25 +27,21 @@ Entities = namedtuple(
         "switch_auto",
         "noise_scene_kitchen",
         "noise_scene_no_label",
-        # input_booleans used as scene targets so we can verify activation
-        "target_open",
-        "target_partial",
-        "target_closed",
-        "target_noise_kitchen",
-        "target_noise_no_label",
     ],
 )
 
 
 @pytest.fixture
-async def hass_topology(hass, mock_zwave_config_entry, mock_powerview_config_entry):
+async def hass_topology(hass, mock_zwave_config_entry, sim_powerview_hub):
     """Set up a standard entity topology for integration tests.
 
-    Uses real HA components throughout so no service mocking is needed:
-    - input_boolean entities are set up via async_setup_component so
-      input_boolean.toggle actually flips their state.
-    - scene entities are set up via async_setup_component so scene.turn_on
-      actually activates them and changes their target entities' states.
+    Uses real HA components throughout:
+    - The real ``hunterdouglas_powerview`` integration is loaded against the
+      SimulatedPowerViewHub, creating real scene entities. Activating them makes
+      actual HTTP calls to the sim hub, which records the activation.
+    - input_boolean.living_room_blinds_central is used by button 4 (central control).
+    - rest_command.powerview_set_scheduled_event makes actual HTTP PUT calls to the sim hub.
+    - sensor.powerview_scheduled_events is a real REST sensor polling the hub.
     - "Noise" entities (wrong area, or no label) verify discovery is precise.
     """
     area_reg = ar.async_get(hass)
@@ -55,10 +55,10 @@ async def hass_topology(hass, mock_zwave_config_entry, mock_powerview_config_ent
     areas = Areas(living_room=area_living_room, kitchen=area_kitchen)
 
     # 2. Create Labels
-    label_open = label_reg.async_create("Blinds Open")
+    label_open    = label_reg.async_create("Blinds Open")
     label_partial = label_reg.async_create("Blinds Partial")
-    label_closed = label_reg.async_create("Blinds Closed")
-    label_auto = label_reg.async_create("Automated Mode")
+    label_closed  = label_reg.async_create("Blinds Closed")
+    label_auto    = label_reg.async_create("Automated Mode")
     labels = Labels(
         open=label_open.label_id,
         partial=label_partial.label_id,
@@ -67,9 +67,9 @@ async def hass_topology(hass, mock_zwave_config_entry, mock_powerview_config_ent
     )
     # Scheduled event label IDs — assigned directly to entities (no label registry entry
     # needed because labels() template reads raw strings from entity registry)
-    sched_label_open = "powerview.scheduledEvent_id.48860"
+    sched_label_open    = "powerview.scheduledEvent_id.48860"
     sched_label_partial = "powerview.scheduledEvent_id.21095"
-    sched_label_closed = "powerview.scheduledEvent_id.56009"
+    sched_label_closed  = "powerview.scheduledEvent_id.56009"
 
     # 3. Create ZEN35 Device in Living Room
     device = dev_reg.async_get_or_create(
@@ -79,129 +79,139 @@ async def hass_topology(hass, mock_zwave_config_entry, mock_powerview_config_ent
     )
     device = dev_reg.async_update_device(device.id, area_id=areas.living_room.id)
 
-    # PowerView hub device (configuration_url is used by blueprint to derive hub base URL)
-    powerview_device = dev_reg.async_get_or_create(
-        config_entry_id=mock_powerview_config_entry.entry_id,
-        identifiers={("hunterdouglas_powerview", "00:26:74:60:31:FD")},
-        name="PowerView Hub",
-        configuration_url="http://192.168.4.22/api/shades",
+    # 4. Set up homeassistant integration (provides update_entity service) and the REST sensor
+    #    before loading the PowerView integration.
+    #    Once hunterdouglas_powerview loads it also sets up the sensor component,
+    #    which means a subsequent async_setup_component(hass, "sensor", ...) would be
+    #    a no-op. We must load the REST sensor first so it actually gets registered.
+    await async_setup_component(hass, "homeassistant", {})
+    await hass.async_block_till_done()
+
+    assert await async_setup_component(
+        hass,
+        "sensor",
+        {
+            "sensor": [
+                {
+                    "platform": "rest",
+                    "resource": f"{sim_powerview_hub.url}/api/scheduledEvents",
+                    "name": "powerview_scheduled_events",
+                    "scan_interval": 300,
+                    "value_template": "{{ value_json.scheduledEventData | length }}",
+                    "json_attributes": ["scheduledEventData"],
+                }
+            ]
+        },
+    ), "REST sensor setup failed — is the sim hub running?"
+    # Force an immediate poll so sensor attributes are populated before any test runs.
+    await hass.services.async_call(
+        "homeassistant", "update_entity",
+        {"entity_id": "sensor.powerview_scheduled_events"},
+        blocking=True,
     )
 
-    # 4. Set up real input_boolean entities.
-    #    Each scene targets one dedicated boolean so activating it changes
-    #    observable state. Noise scenes get their own targets.
+    # 6. Load the real Hunter Douglas PowerView integration against the sim hub.
+    #    This creates real scene entities (scene.open, scene.partial, etc.) backed
+    #    by actual HTTP calls to SimulatedPowerViewHub.
+    pv_entry = ConfigEntry(
+        version=1,
+        minor_version=1,
+        domain="hunterdouglas_powerview",
+        title="PowerView Hub",
+        data={CONF_HOST: sim_powerview_hub.url.removeprefix("http://"), CONF_API_VERSION: 2},
+        options={},
+        entry_id="test-powerview",
+        state=ConfigEntryState.NOT_LOADED,
+        source="user",
+        unique_id="SIMHUB001",
+        discovery_keys=set(),
+        subentries_data={},
+    )
+    hass.config_entries._entries[pv_entry.entry_id] = pv_entry
+    await hass.config_entries.async_setup(pv_entry.entry_id)
+    await hass.async_block_till_done()
+
+    # Retrieve the hub device created by the integration and set configuration_url
+    # so the blueprint can extract the hub base URL via device_attr(..., 'configuration_url').
+    powerview_device = dev_reg.async_get_device(
+        identifiers={("hunterdouglas_powerview", "SIMHUB001")}
+    )
+    dev_reg.async_update_device(
+        powerview_device.id,
+        configuration_url=f"{sim_powerview_hub.url}/api/shades",
+    )
+    powerview_device = dev_reg.async_get_device(
+        identifiers={("hunterdouglas_powerview", "SIMHUB001")}
+    )
+
+    # 7. Set up the central-control input_boolean (button 4 target).
     await async_setup_component(
         hass,
         "input_boolean",
-        {
-            "input_boolean": {
-                "living_room_blinds_central": {},
-                "blinds_open_activated": {},
-                "blinds_partial_activated": {},
-                "blinds_closed_activated": {},
-                "noise_kitchen_activated": {},
-                "noise_unlabeled_activated": {},
-            }
-        },
+        {"input_boolean": {"living_room_blinds_central": {}}},
     )
     await hass.async_block_till_done()
 
-    # 5. Set up real scenes that target those input_booleans.
-    #    When scene.turn_on is called the target boolean flips to "on".
-    #    The "id" field gives each scene a unique_id so it is registered in
-    #    the entity registry, which is required for label/area assignment.
-    await async_setup_component(
-        hass,
-        "scene",
-        {
-            "scene": [
-                {
-                    "id": "lr_open",
-                    "name": "Living Room Open",
-                    "entities": {"input_boolean.blinds_open_activated": {"state": "on"}},
-                },
-                {
-                    "id": "lr_partial",
-                    "name": "Living Room Partial",
-                    "entities": {"input_boolean.blinds_partial_activated": {"state": "on"}},
-                },
-                {
-                    "id": "lr_closed",
-                    "name": "Living Room Closed",
-                    "entities": {"input_boolean.blinds_closed_activated": {"state": "on"}},
-                },
-                # Noise: same label as open but in Kitchen — must NOT be triggered by LR button
-                {
-                    "id": "kit_open",
-                    "name": "Kitchen Open",
-                    "entities": {"input_boolean.noise_kitchen_activated": {"state": "on"}},
-                },
-                # Noise: in Living Room but no label — must NOT be triggered
-                {
-                    "id": "lr_unlabeled",
-                    "name": "Living Room Unlabeled",
-                    "entities": {"input_boolean.noise_unlabeled_activated": {"state": "on"}},
-                },
-            ]
-        },
-    )
-    await hass.async_block_till_done()
+    # 8. Assign areas and labels to the PowerView scene entities.
+    scene_open_entry    = ent_reg.async_get("scene.open")
+    scene_partial_entry = ent_reg.async_get("scene.partial")
+    scene_closed_entry  = ent_reg.async_get("scene.closed")
+    noise_kitchen_entry = ent_reg.async_get("scene.kitchen_open")
+    noise_no_label_entry = ent_reg.async_get("scene.living_room_unlabeled")
 
-    # 6. Assign areas and labels via entity registry.
-    scene_open_entry = ent_reg.async_get("scene.living_room_open")
     ent_reg.async_update_entity(
         scene_open_entry.entity_id,
         area_id=areas.living_room.id,
         labels={labels.open, sched_label_open},
     )
-
-    scene_partial_entry = ent_reg.async_get("scene.living_room_partial")
     ent_reg.async_update_entity(
         scene_partial_entry.entity_id,
         area_id=areas.living_room.id,
         labels={labels.partial, sched_label_partial},
     )
-
-    scene_closed_entry = ent_reg.async_get("scene.living_room_closed")
     ent_reg.async_update_entity(
         scene_closed_entry.entity_id,
         area_id=areas.living_room.id,
         labels={labels.closed, sched_label_closed},
     )
-
-    noise_kitchen_entry = ent_reg.async_get("scene.kitchen_open")
     ent_reg.async_update_entity(
-        noise_kitchen_entry.entity_id, area_id=areas.kitchen.id, labels={labels.open}
+        noise_kitchen_entry.entity_id,
+        area_id=areas.kitchen.id,
+        labels={labels.open},
     )
-
-    noise_no_label_entry = ent_reg.async_get("scene.living_room_unlabeled")
     ent_reg.async_update_entity(
-        noise_no_label_entry.entity_id, area_id=areas.living_room.id
+        noise_no_label_entry.entity_id,
+        area_id=areas.living_room.id,
         # intentionally no label
     )
 
     switch_auto_entry = ent_reg.async_get("input_boolean.living_room_blinds_central")
     ent_reg.async_update_entity(
-        switch_auto_entry.entity_id, area_id=areas.living_room.id, labels={labels.auto}
+        switch_auto_entry.entity_id,
+        area_id=areas.living_room.id,
+        labels={labels.auto},
     )
-
     await hass.async_block_till_done()
 
-    # Seed the PowerView scheduled events sensor (all enabled = opted in)
-    hass.states.async_set(
-        "sensor.powerview_scheduled_events",
-        "3",
+    # 9. Set up real rest_command for PowerView scheduled event control.
+    await async_setup_component(
+        hass,
+        "rest_command",
         {
-            "scheduledEventData": [
-                {"id": 48860, "enabled": True, "sceneId": 36156},
-                {"id": 21095, "enabled": True, "sceneId": 16652},
-                {"id": 56009, "enabled": True, "sceneId": 46041},
-            ]
+            "rest_command": {
+                "powerview_set_scheduled_event": {
+                    "url": "{{ hub }}/api/scheduledEvents/{{ id }}",
+                    "method": "PUT",
+                    "content_type": "application/json",
+                    "payload": '{"scheduledEvent": {"enabled": {{ enabled }}}}',
+                }
+            }
         },
     )
+    await hass.async_block_till_done()
 
     return Topology(
-        device=device,
+        zen35_device=device,
         areas=areas,
         labels=labels,
         powerview_device=powerview_device,
@@ -212,10 +222,5 @@ async def hass_topology(hass, mock_zwave_config_entry, mock_powerview_config_ent
             switch_auto=switch_auto_entry.entity_id,
             noise_scene_kitchen=noise_kitchen_entry.entity_id,
             noise_scene_no_label=noise_no_label_entry.entity_id,
-            target_open="input_boolean.blinds_open_activated",
-            target_partial="input_boolean.blinds_partial_activated",
-            target_closed="input_boolean.blinds_closed_activated",
-            target_noise_kitchen="input_boolean.noise_kitchen_activated",
-            target_noise_no_label="input_boolean.noise_unlabeled_activated",
         ),
     )
