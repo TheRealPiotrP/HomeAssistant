@@ -100,13 +100,7 @@ async def hass_topology(hass, mock_zwave_config_entry, sim_powerview_hub):
             ]
         },
     ), "REST sensor setup failed — is the sim hub running?"
-    await hass.async_block_till_done()  # ensure entity is registered before polling
-    # Force an immediate poll so sensor attributes are populated before any test runs.
-    await hass.services.async_call(
-        "homeassistant", "update_entity",
-        {"entity_id": "sensor.powerview_scheduled_events"},
-        blocking=True,
-    )
+    await hass.async_block_till_done()  # ensure entity is registered
 
     # 6. Load the real Hunter Douglas PowerView integration against the sim hub.
     #    This creates real scene entities (scene.open, scene.partial, etc.) backed
@@ -192,6 +186,16 @@ async def hass_topology(hass, mock_zwave_config_entry, sim_powerview_hub):
         },
     )
     await hass.async_block_till_done()
+
+    # Force a final sensor poll now that all setup is complete.
+    # Doing this last ensures no subsequent async_block_till_done() calls (from
+    # PowerView integration load, rest_command setup, etc.) can invalidate the
+    # cached sensor state before any test reads it.
+    await hass.services.async_call(
+        "homeassistant", "update_entity",
+        {"entity_id": "sensor.powerview_scheduled_events"},
+        blocking=True,
+    )
 
     return Topology(
         zen35_device=device,
