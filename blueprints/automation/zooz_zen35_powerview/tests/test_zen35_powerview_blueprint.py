@@ -382,11 +382,6 @@ async def test_button4_confirm_mode_led_turns_off_after_timeout(
             {"id": 21095, "enabled": False, "sceneId": 16652},
             {"id": 56009, "enabled": False, "sceneId": 46041},
         ])
-        await hass.services.async_call(
-            "homeassistant", "update_entity",
-            {"entity_id": "sensor.powerview_scheduled_events"},
-            blocking=True,
-        )
 
     await load_blueprint(topology.zen35_device, topology.labels, confirm_timeout=0.001)
 
@@ -511,11 +506,6 @@ async def test_button4_powerview_toggles_scheduled_events(
             {"id": 21095, "enabled": False, "sceneId": 16652},
             {"id": 56009, "enabled": False, "sceneId": 46041},
         ])
-        await hass.services.async_call(
-            "homeassistant", "update_entity",
-            {"entity_id": "sensor.powerview_scheduled_events"},
-            blocking=True,
-        )
 
     await load_blueprint(topology.zen35_device, topology.labels)
 
@@ -543,24 +533,18 @@ async def test_init_sets_led4_from_powerview_sensor(
     """On automation_reloaded with PowerView hub, LED4 reflects the sensor's enabled state.
 
     When all events are disabled (opted out), LED4 should be ON (red).
-    The REST sensor fetches from the real sim hub, so seeding the hub and
-    refreshing the sensor is sufficient to set up the pre-condition.
+    Seeding the hub before load_blueprint is sufficient; load_blueprint injects
+    the sensor state directly from the hub.
     """
     topology = hass_topology
     device_id = topology.zen35_device.id
 
-    # Seed hub with all disabled and refresh sensor
+    # Seed hub with all disabled; load_blueprint will inject sensor state from hub.
     sim_powerview_hub.seed_events([
         {"id": 48860, "enabled": False, "sceneId": 36156},
         {"id": 21095, "enabled": False, "sceneId": 16652},
         {"id": 56009, "enabled": False, "sceneId": 46041},
     ])
-    await hass.services.async_call(
-        "homeassistant", "update_entity",
-        {"entity_id": "sensor.powerview_scheduled_events"},
-        blocking=True,
-    )
-    await hass.async_block_till_done()
 
     await load_blueprint(topology.zen35_device, topology.labels)
 

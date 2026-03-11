@@ -180,7 +180,7 @@ class SimulatedPowerViewHub:
         body = await request.json()
         enabled = body.get("scheduledEvent", {}).get("enabled", False)
         if event_id in self._events:
-            self._events[event_id]["enabled"] = enabled
+            self._events[event_id] = {**self._events[event_id], "enabled": enabled}
         return web.json_response({"scheduledEvent": self._events.get(event_id, {})})
 
     async def _handle_unrecognized(self, request: web.Request) -> web.Response:

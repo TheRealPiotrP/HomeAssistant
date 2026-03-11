@@ -103,7 +103,7 @@ async def sim_powerview_hub(socket_enabled) -> SimulatedPowerViewHub:
 
 
 @pytest.fixture
-def load_blueprint(hass, copy_blueprint_to_config):
+def load_blueprint(hass, copy_blueprint_to_config, sim_powerview_hub):
     """Load the blueprint into HA. Accepts a Labels namedtuple from hass_topology."""
 
     async def _load(
@@ -134,5 +134,19 @@ def load_blueprint(hass, copy_blueprint_to_config):
             },
         )
         await hass.async_block_till_done()
+        # Inject sensor state and drain any tasks it triggers, then re-inject
+        # so the state is guaranteed fresh with no pending tasks ahead of it.
+        events = list(sim_powerview_hub._events.values())
+        hass.states.async_set(
+            "sensor.powerview_scheduled_events",
+            str(len(events)),
+            {"scheduledEventData": events},
+        )
+        await hass.async_block_till_done()
+        hass.states.async_set(
+            "sensor.powerview_scheduled_events",
+            str(len(events)),
+            {"scheduledEventData": events},
+        )
 
     return _load

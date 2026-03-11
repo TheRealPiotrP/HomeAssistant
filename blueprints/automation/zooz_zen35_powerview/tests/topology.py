@@ -76,33 +76,7 @@ async def hass_topology(hass, mock_zwave_config_entry, sim_powerview_hub):
     )
     device = dev_reg.async_update_device(device.id, area_id=areas.living_room.id)
 
-    # 4. Set up homeassistant integration (provides update_entity service) and the REST sensor
-    #    before loading the PowerView integration.
-    #    Once hunterdouglas_powerview loads it also sets up the sensor component,
-    #    which means a subsequent async_setup_component(hass, "sensor", ...) would be
-    #    a no-op. We must load the REST sensor first so it actually gets registered.
-    await async_setup_component(hass, "homeassistant", {})
-    await hass.async_block_till_done()
-
-    assert await async_setup_component(
-        hass,
-        "sensor",
-        {
-            "sensor": [
-                {
-                    "platform": "rest",
-                    "resource": f"{sim_powerview_hub.url}/api/scheduledEvents",
-                    "name": "powerview_scheduled_events",
-                    "scan_interval": 300,
-                    "value_template": "{{ value_json.scheduledEventData | length }}",
-                    "json_attributes": ["scheduledEventData"],
-                }
-            ]
-        },
-    ), "REST sensor setup failed — is the sim hub running?"
-    await hass.async_block_till_done()  # ensure entity is registered
-
-    # 6. Load the real Hunter Douglas PowerView integration against the sim hub.
+    # 4. Load the real Hunter Douglas PowerView integration against the sim hub.
     #    This creates real scene entities (scene.open, scene.partial, etc.) backed
     #    by actual HTTP calls to SimulatedPowerViewHub.
     pv_entry = ConfigEntry(
@@ -187,14 +161,15 @@ async def hass_topology(hass, mock_zwave_config_entry, sim_powerview_hub):
     )
     await hass.async_block_till_done()
 
-    # Force a final sensor poll now that all setup is complete.
-    # Doing this last ensures no subsequent async_block_till_done() calls (from
-    # PowerView integration load, rest_command setup, etc.) can invalidate the
-    # cached sensor state before any test reads it.
-    await hass.services.async_call(
-        "homeassistant", "update_entity",
-        {"entity_id": "sensor.powerview_scheduled_events"},
-        blocking=True,
+    # 10. Inject the initial scheduled-event sensor state directly into the HA
+    #     state machine. Direct injection avoids HTTP polling timing races:
+    #     async_block_till_done() can trigger background REST sensor scans
+    #     that overwrite state — a directly-set state is immune to this.
+    events = list(sim_powerview_hub._events.values())
+    hass.states.async_set(
+        "sensor.powerview_scheduled_events",
+        str(len(events)),
+        {"scheduledEventData": events},
     )
 
     return Topology(
