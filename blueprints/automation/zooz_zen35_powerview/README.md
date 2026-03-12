@@ -61,7 +61,7 @@ Repeat for the partially-open and closed scenes.
 
 ### 5. Add Required YAML Configuration
 
-The blueprint uses a `rest_command` to enable/disable PowerView scheduled events, and a REST sensor to read their current state. Add the following to your `configuration.yaml`, replacing `YOUR_HUB_IP` with your PowerView hub's IP address:
+The blueprint uses a `rest_command` to enable/disable PowerView scheduled events, and a REST sensor to read their current state. Both discover the hub automatically from the PowerView integration — no IP address needed. Add the following to your `configuration.yaml`:
 
 ```yaml
 rest_command:
