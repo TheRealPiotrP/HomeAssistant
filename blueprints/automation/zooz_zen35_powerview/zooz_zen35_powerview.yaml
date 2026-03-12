@@ -8,6 +8,8 @@ blueprint:
     LEDs: active scene button stays on, others off. Assign labels, put ZEN35
     and entities in the same area, and the blueprint discovers them.
   domain: automation
+  homeassistant:
+    min_version: "2023.6.0"
 
   input:
     zen35_device:
