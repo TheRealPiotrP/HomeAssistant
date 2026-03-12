@@ -368,7 +368,7 @@ action:
               parameter: 1
               value: 2
 
-      # Button 4 (Scene 004) – Toggle central control / PowerView scheduled events
+      # Button 4 (Scene 004) – Toggle PowerView scheduled events
       - conditions:
           - "{{ scene_id == 'Scene 004' }}"
           - "{{ scene_value == 'KeyPressed' }}"
