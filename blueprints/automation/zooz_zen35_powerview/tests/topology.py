@@ -66,12 +66,6 @@ async def hass_topology(hass, mock_zwave_config_entry, sim_powerview_hub):
         partial=label_partial.label_id,
         closed=label_closed.label_id,
     )
-    # Scheduled event label IDs — assigned directly to entities (no label registry entry
-    # needed because labels() template reads raw strings from entity registry)
-    sched_label_open    = "powerview.scheduledEvent_id.48860"
-    sched_label_partial = "powerview.scheduledEvent_id.21095"
-    sched_label_closed  = "powerview.scheduledEvent_id.56009"
-
     # 3. Create ZEN35 Device in Living Room
     device = dev_reg.async_get_or_create(
         config_entry_id=mock_zwave_config_entry.entry_id,
@@ -124,17 +118,17 @@ async def hass_topology(hass, mock_zwave_config_entry, sim_powerview_hub):
     ent_reg.async_update_entity(
         scene_open_entry.entity_id,
         area_id=areas.living_room.id,
-        labels={labels.open, sched_label_open},
+        labels={labels.open},
     )
     ent_reg.async_update_entity(
         scene_partial_entry.entity_id,
         area_id=areas.living_room.id,
-        labels={labels.partial, sched_label_partial},
+        labels={labels.partial},
     )
     ent_reg.async_update_entity(
         scene_closed_entry.entity_id,
         area_id=areas.living_room.id,
-        labels={labels.closed, sched_label_closed},
+        labels={labels.closed},
     )
     ent_reg.async_update_entity(
         noise_kitchen_entry.entity_id,
@@ -147,6 +141,23 @@ async def hass_topology(hass, mock_zwave_config_entry, sim_powerview_hub):
         # intentionally no label
     )
     await hass.async_block_till_done()
+
+    # 8. Inject scheduledEvent_id attribute onto scene states.
+    #    The blueprint reads state_attr(entity, 'scheduledEvent_id') to find which
+    #    scheduled event corresponds to each scene, replacing the old label approach.
+    sched_event_by_entity = {
+        scene_open_entry.entity_id:    48860,
+        scene_partial_entry.entity_id: 21095,
+        scene_closed_entry.entity_id:  56009,
+    }
+    for entity_id, event_id in sched_event_by_entity.items():
+        state = hass.states.get(entity_id)
+        if state:
+            hass.states.async_set(
+                entity_id,
+                state.state,
+                {**state.attributes, "scheduledEvent_id": event_id},
+            )
 
     # 9. Set up real rest_command for PowerView scheduled event control.
     await async_setup_component(

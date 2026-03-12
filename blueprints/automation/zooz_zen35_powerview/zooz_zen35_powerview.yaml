@@ -134,11 +134,9 @@ action:
         {% if hub_url and area_id %}
           {% set ns = namespace(ids=[]) %}
           {% for entity in area_entities(area_id) | select('search', '^scene[.]') %}
-            {% set sched_label = labels(entity)
-                | select('match', 'powerview\\.scheduledEvent_id\\..*')
-                | first | default('') %}
-            {% if sched_label %}
-              {% set ns.ids = ns.ids + [sched_label | replace('powerview.scheduledEvent_id.', '') | int] %}
+            {% set sched_id = state_attr(entity, 'scheduledEvent_id') %}
+            {% if sched_id is not none %}
+              {% set ns.ids = ns.ids + [sched_id | int] %}
             {% endif %}
           {% endfor %}
           {{ ns.ids }}
