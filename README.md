@@ -189,36 +189,3 @@ The blueprint re-applies LED colors and turns button LEDs off on every HA start 
 1. In **Developer Tools → States**, confirm the scene entity has the correct area and label assigned.
 2. In **Developer Tools → Events**, listen for `zwave_js_value_notification` and press the button to verify the event fires with `command_class_name: Central Scene`.
 3. Confirm the automation is enabled.
-
----
-
-## Testing (Development)
-
-Blueprint tests use [pytest-homeassistant-custom-component](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component) and run against simulated hardware — no real ZEN35 or PowerView hub required.
-
-### Setup
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements-test.txt
-```
-
-### Running Tests
-
-```bash
-# All tests
-pytest -v
-
-# Single blueprint's tests
-pytest blueprints/automation/zooz_zen35_powerview/tests -v
-
-# By name
-pytest -k "test_button_1_opens_scene" -v
-```
-
-### Lint
-
-```bash
-ruff check .
-```
