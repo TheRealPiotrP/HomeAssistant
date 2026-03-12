@@ -30,6 +30,14 @@ pytest blueprints/automation/zooz_zen35_powerview/tests/test_zen35_powerview_blu
 pytest -k "test_button_1_opens_scene" -v
 ```
 
+## Testing Preferences
+
+**Use real integrations, not mocks.** Tests run the actual `hunterdouglas_powerview` integration, real HA service dispatch, and a real aiohttp HTTP server (`SimulatedPowerViewHub`). Do not mock services or HTTP calls — use simulated hardware that exercises the full call path.
+
+**Assert on simulation state, not call arguments.** After firing a Z-Wave event, assert on what the simulated hardware observed (which scenes activated, which scheduled events toggled, which LED parameters were set) rather than inspecting mock call counts or arguments.
+
+**Inject state directly to avoid timing races.** Use `hass.states.async_set` to seed sensor state rather than relying on REST sensor polling. Async polling timing is non-deterministic and will cause flaky tests.
+
 ## Workflow
 
 Before implementing any non-trivial change, present the plan and wait for explicit approval. Do not start writing code or modifying files until the plan is confirmed.
