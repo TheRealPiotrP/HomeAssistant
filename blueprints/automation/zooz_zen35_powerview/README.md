@@ -2,19 +2,6 @@
 
 Automatically map Zooz ZEN35 switches to Hunter Douglas PowerView blind scenes using **areas + labels**. No per-room entity selection needed.
 
-## Button Layout
-
-```
-┌─────────────────────┐
-│   dimmer  (load)    │
-│         💡          │
-├──────────┬──────────┤
-│   💡  1  │   💡  2  │
-├──────────┼──────────┤
-│   💡  3  │   💡  4  │
-└──────────┴──────────┘
-```
-
 | Button | Action |
 |--------|--------|
 | **Dimmer** | Controls the physical load (light/fan). In confirm mode, pressing it flashes the load LED briefly. |
@@ -22,95 +9,6 @@ Automatically map Zooz ZEN35 switches to Hunter Douglas PowerView blind scenes u
 | **Button 2** | Activate "partially open" PowerView scenes |
 | **Button 3** | Activate "fully close" PowerView scenes |
 | **Button 4** | Toggle PowerView scheduled events for the room; **red = opted out** |
-
-## LED Indicators
-
-### Color Themes
-
-Colors are applied to the device on HA startup and whenever the automation is saved.
-
-```
-┌─────────────────────┐     ┌─────────────────────┐
-│   dimmer  (load)    │     │   dimmer  (load)    │
-│         ⚪          │     │         🩵          │
-├──────────┬──────────┤     ├──────────┬──────────┤
-│   ⚪  1  │   ⚪  2  │     │   🔵  1  │   🟢  2  │
-├──────────┼──────────┤     ├──────────┼──────────┤
-│   ⚪  3  │   🔴  4  │     │   🟡  3  │   🔴  4  │
-└──────────┴──────────┘     └──────────┴──────────┘
-      default theme               rainbow theme
-```
-
-| | Load | Button 1 | Button 2 | Button 3 | Button 4 |
-|-|------|----------|----------|----------|----------|
-| **Default** | ⚪ white | ⚪ white | ⚪ white | ⚪ white | 🔴 red |
-| **Rainbow** | 🩵 cyan | 🔵 blue | 🟢 green | 🟡 yellow | 🔴 red |
-
-Button 4 is always red regardless of theme (indicates scheduled-events opt-out state).
-
-The load LED normally uses its default HA behavior (mode 0): on when the load is off, off when it is on. The blueprint only sets its color — it never overrides the mode. Exception: in confirm mode, pressing the dimmer button briefly overrides the load LED to always-on for `confirm_timeout` seconds, then turns it off.
-
-### Persistent Mode (`confirm_timeout = 0`, default)
-
-The active LED stays lit until a different button is pressed.
-
-**Example — scene 2 active, scheduled events disabled (opted out):**
-
-```
-┌─────────────────────┐
-│   dimmer  (load)    │
-│         ⚪          │  ← on when load is off (locator behavior)
-├──────────┬──────────┤
-│   ⬛  1  │   ⚪  2  │  ← scene 2 active
-├──────────┼──────────┤
-│   ⬛  3  │   🔴  4  │  ← opted out (scheduled events off)
-└──────────┴──────────┘
-```
-
-**Example — scene 2 active, scheduled events enabled (opted in):**
-
-```
-┌─────────────────────┐
-│   dimmer  (load)    │
-│         ⚪          │  ← on when load is off (locator behavior)
-├──────────┬──────────┤
-│   ⬛  1  │   ⚪  2  │  ← scene 2 active
-├──────────┼──────────┤
-│   ⬛  3  │   ⬛  4  │  ← opted in (scheduled events on, LED4 dark)
-└──────────┴──────────┘
-```
-
-### Confirm Mode (`confirm_timeout > 0`)
-
-The active LED lights up briefly to acknowledge the press, then turns off.
-Button 4 blinks **white** when opting in (enabling scheduled events), **red** when opting out (disabling scheduled events).
-The dimmer/load button also flashes its LED briefly in this mode.
-
-**Immediately after pressing button 2:**
-
-```
-┌─────────────────────┐
-│   dimmer  (load)    │
-│         ⚪          │
-├──────────┬──────────┤
-│   ⬛  1  │   ⚪  2  │  ← briefly lit
-├──────────┼──────────┤
-│   ⬛  3  │   ⬛  4  │
-└──────────┴──────────┘
-```
-
-**After timeout — steady state:**
-
-```
-┌─────────────────────┐
-│   dimmer  (load)    │
-│         ⚪          │  ← unchanged (load LED not affected)
-├──────────┬──────────┤
-│   ⬛  1  │   ⬛  2  │
-├──────────┼──────────┤
-│   ⬛  3  │   ⬛  4  │
-└──────────┴──────────┘
-```
 
 ---
 
@@ -229,6 +127,83 @@ The label IDs are **shared across rooms** — `powerview_scenes_open` can be app
 ---
 
 ## Configuration Reference
+
+### LED Color Themes
+
+```
+┌─────────────────────┐     ┌─────────────────────┐
+│   dimmer  (load)    │     │   dimmer  (load)    │
+│         ⚪          │     │         🩵          │
+├──────────┬──────────┤     ├──────────┬──────────┤
+│   ⚪  1  │   ⚪  2  │     │   🔵  1  │   🟢  2  │
+├──────────┼──────────┤     ├──────────┼──────────┤
+│   ⚪  3  │   🔴  4  │     │   🟡  3  │   🔴  4  │
+└──────────┴──────────┘     └──────────┴──────────┘
+      default theme               rainbow theme
+```
+
+| | Load | Button 1 | Button 2 | Button 3 | Button 4 |
+|-|------|----------|----------|----------|----------|
+| **Default** | ⚪ white | ⚪ white | ⚪ white | ⚪ white | 🔴 red |
+| **Rainbow** | 🩵 cyan | 🔵 blue | 🟢 green | 🟡 yellow | 🔴 red |
+
+Colors are applied on HA startup and whenever the automation is saved. Button 4 is always red regardless of theme.
+
+The load LED uses its default HA behavior (on when load is off, off when load is on). The blueprint only sets its color, never its mode — except in confirm mode, where pressing the dimmer briefly overrides it to always-on for `confirm_timeout` seconds.
+
+### LED Behavior
+
+**Persistent mode** (`confirm_timeout = 0`, default) — the active LED stays lit until a different button is pressed.
+
+**Example — scene 2 active, scheduled events disabled:**
+```
+┌─────────────────────┐
+│   dimmer  (load)    │
+│         ⚪          │  ← on when load is off (locator behavior)
+├──────────┬──────────┤
+│   ⬛  1  │   ⚪  2  │  ← scene 2 active
+├──────────┼──────────┤
+│   ⬛  3  │   🔴  4  │  ← opted out (scheduled events off)
+└──────────┴──────────┘
+```
+
+**Example — scene 2 active, scheduled events enabled:**
+```
+┌─────────────────────┐
+│   dimmer  (load)    │
+│         ⚪          │
+├──────────┬──────────┤
+│   ⬛  1  │   ⚪  2  │  ← scene 2 active
+├──────────┼──────────┤
+│   ⬛  3  │   ⬛  4  │  ← opted in (LED4 dark)
+└──────────┴──────────┘
+```
+
+**Confirm mode** (`confirm_timeout > 0`) — the active LED lights up briefly, then turns off. Button 4 blinks white when opting in, red when opting out.
+
+**Immediately after pressing button 2:**
+```
+┌─────────────────────┐
+│   dimmer  (load)    │
+│         ⚪          │
+├──────────┬──────────┤
+│   ⬛  1  │   ⚪  2  │  ← briefly lit
+├──────────┼──────────┤
+│   ⬛  3  │   ⬛  4  │
+└──────────┴──────────┘
+```
+
+**After timeout:**
+```
+┌─────────────────────┐
+│   dimmer  (load)    │
+│         ⚪          │
+├──────────┬──────────┤
+│   ⬛  1  │   ⬛  2  │
+├──────────┼──────────┤
+│   ⬛  3  │   ⬛  4  │
+└──────────┴──────────┘
+```
 
 ### Confirm Timeout
 
