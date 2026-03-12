@@ -2,7 +2,7 @@
 
 Automatically map Zooz ZEN35 switches to Hunter Douglas PowerView blind scenes using **areas + labels**. No per-room entity selection needed.
 
-## Button layout
+## Button Layout
 
 ```
 ┌─────────────────────┐
@@ -23,9 +23,9 @@ Automatically map Zooz ZEN35 switches to Hunter Douglas PowerView blind scenes u
 | **Button 3** | Activate "fully close" PowerView scenes |
 | **Button 4** | Toggle PowerView scheduled events for the room; **red = opted out** |
 
-## LED indicators
+## LED Indicators
 
-### Color themes
+### Color Themes
 
 Colors are applied to the device on HA startup and whenever the automation is saved.
 
@@ -46,9 +46,11 @@ Colors are applied to the device on HA startup and whenever the automation is sa
 | **Default** | ⚪ white | ⚪ white | ⚪ white | ⚪ white | 🔴 red |
 | **Rainbow** | 🩵 cyan | 🔵 blue | 🟢 green | 🟡 yellow | 🔴 red |
 
+Button 4 is always red regardless of theme (indicates scheduled-events opt-out state).
+
 The load LED normally uses its default HA behavior (mode 0): on when the load is off, off when it is on. The blueprint only sets its color — it never overrides the mode. Exception: in confirm mode, pressing the dimmer button briefly overrides the load LED to always-on for `confirm_timeout` seconds, then turns it off.
 
-### Persistent mode (`confirm_timeout = 0`, default)
+### Persistent Mode (`confirm_timeout = 0`, default)
 
 The active LED stays lit until a different button is pressed.
 
@@ -78,7 +80,7 @@ The active LED stays lit until a different button is pressed.
 └──────────┴──────────┘
 ```
 
-### Confirm mode (`confirm_timeout > 0`)
+### Confirm Mode (`confirm_timeout > 0`)
 
 The active LED lights up briefly to acknowledge the press, then turns off.
 Button 4 blinks **white** when opting in (enabling scheduled events), **red** when opting out (disabling scheduled events).
@@ -110,61 +112,165 @@ The dimmer/load button also flashes its LED briefly in this mode.
 └──────────┴──────────┘
 ```
 
-## Setup
+---
 
-See the [root README](../../../README.md) for full setup instructions. Quick summary:
+## Quick Start
 
-### 1. Create labels
+### 1. Prerequisites
 
-In **Settings → Labels**, create these labels:
+You need:
 
-- `powerview_scenes_open` — scenes that fully open shades
-- `powerview_scenes_partially_open` — scenes that partially open shades (e.g. 50%)
-- `powerview_scenes_closed` — scenes that fully close shades
+- A **Zooz ZEN35** switch added to Home Assistant via **Z-Wave JS**
+- The **Hunter Douglas PowerView** integration installed and connected to your hub
+- PowerView **scenes** already configured in the PowerView app and visible in HA as `scene.*` entities
 
-### 2. Assign labels to scene entities
+### 2. Create an Area for the Room
 
-Assign each label to the matching PowerView `scene.*` entities (e.g. `scene.living_room_open`).
+In **Settings → Areas & Zones → Areas**, create an area for the room (e.g., *Living Room*).
 
-### 3. Use areas
+Assign the **ZEN35 device** to that area:
+- Go to **Settings → Devices & Services → Z-Wave JS**
+- Find the ZEN35 device → click it → click **Edit** → set the Area to *Living Room*
 
-Put each ZEN35 device in the same area as its PowerView scenes.
-Example: ZEN35 in "Living Room" + PowerView scenes in "Living Room".
+### 3. Create the Scene Labels
 
-### 4. Add required YAML configuration
+Labels are how the blueprint discovers which scenes to activate. You need three labels — one per scene type.
 
-Add `rest_command.powerview_set_scheduled_event` and `sensor.powerview_scheduled_events` to `configuration.yaml`. See the [root README](../../../README.md#5-add-required-yaml-configuration) for the exact YAML.
+Go to **Settings → Labels** and create the following. When creating each label, set the **Name** exactly as shown so HA generates the matching label ID automatically:
 
-### 5. Create one automation per switch
+| Label Name | Generated Label ID | Purpose |
+|------------|--------------------|---------|
+| `powerview_scenes_open` | `powerview_scenes_open` | Fully open scenes |
+| `powerview_scenes_partially_open` | `powerview_scenes_partially_open` | Partially open scenes |
+| `powerview_scenes_closed` | `powerview_scenes_closed` | Fully closed scenes |
 
-- Import the blueprint (or copy `zooz_zen35_powerview.yaml` to `config/blueprints/automation/zooz_zen35_powerview/`)
-- Create an automation from the blueprint
-- Select the ZEN35 device
-- Choose your **LED Color Theme** (`default` or `rainbow`)
-- Set **Confirm Timeout** if you want LEDs to go dark after a press (0 = stay on)
-- Optionally change the label IDs if you used different ones
-- Save — no entity selection needed; discovery is automatic per area
+> **Tip:** You can use any label names you like. If you choose different names, enter their generated label IDs in the blueprint inputs when creating the automation. The defaults above match the blueprint's pre-filled values.
+>
+> **HA quirk:** HA replaces dots in label names with underscores when generating the label ID (e.g. `powerview.scenes.open` becomes `powerview_scenes_open`). If a label selector in the blueprint shows "Unknown item", open the dropdown and re-select the label to pick up the correct ID.
 
-## Testing
+### 4. Label and Place Your PowerView Scene Entities
 
-### Automated tests
+For **each room**, assign each relevant `scene.*` entity to the room's area and attach the appropriate label.
 
-From the repo root, install test deps and run pytest:
+Go to **Settings → Entities**, search for your PowerView scenes, and for each one:
+1. Click the entity → click **Edit**
+2. Set **Area** to the room's area (e.g., *Living Room*)
+3. Add the matching label (e.g., `powerview_scenes_open` for the fully-open scene)
 
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements-test.txt
-pytest -v
+Repeat for the partially-open and closed scenes.
+
+> The blueprint uses both area *and* label to match entities, so scenes in other rooms that share the same labels are safely ignored.
+
+### 5. Add Required YAML Configuration
+
+The blueprint uses a `rest_command` to enable/disable PowerView scheduled events, and a REST sensor to read their current state. Add the following to your `configuration.yaml`, replacing `YOUR_HUB_IP` with your PowerView hub's IP address:
+
+```yaml
+rest_command:
+  powerview_set_scheduled_event:
+    url: "{{ hub }}/api/scheduledEvents/{{ id }}"
+    method: PUT
+    content_type: application/json
+    payload: '{"scheduledEvent": {"enabled": {{ enabled }}}}'
+
+sensor:
+  - platform: rest
+    name: "PowerView Scheduled Events"
+    unique_id: powerview_scheduled_events
+    resource: "http://YOUR_HUB_IP/api/scheduledEvents"
+    value_template: "{{ value_json.scheduledEventData | length }}"
+    json_attributes:
+      - scheduledEventData
+    scan_interval: 60
 ```
 
-Tests fire `zwave_js_value_notification` events into a real Home Assistant instance and verify actual state changes — scenes activate, scheduled events toggle, and `zwave_js.set_config_parameter` calls are captured to verify LED parameter values.
+Restart Home Assistant after saving.
 
-### Manual hardware checklist
+> **Note:** The hub URL in `rest_command` is passed dynamically by the blueprint — it auto-discovers the hub address from the PowerView integration, so no hardcoded IP is needed there. The REST sensor does require the hub IP directly.
+
+### 6. Install the Blueprint
+
+[![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FTheRealPiotrP%2FHomeAssistant%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fzooz_zen35_powerview%2Fzooz_zen35_powerview.yaml)
+
+Or manually: go to **Settings → Automations & Scenes → Blueprints → Import Blueprint** and paste the raw URL to `zooz_zen35_powerview.yaml` from this repository.
+
+### 7. Create the Automation
+
+Go to **Settings → Automations & Scenes → Blueprints**, find *Zooz ZEN35 → PowerView (Auto-Configuring)*, and click **Create Automation**.
+
+Fill in the inputs:
+
+| Input | Description | Default |
+|-------|-------------|---------|
+| **ZEN35 Switch** | Select the ZEN35 device for this room | — |
+| **Label for "fully open" scenes** | Label ID applied to fully-open scenes | `powerview_scenes_open` |
+| **Label for "partially open" scenes** | Label ID applied to partially-open scenes | `powerview_scenes_partially_open` |
+| **Label for "fully close" scenes** | Label ID applied to fully-closed scenes | `powerview_scenes_closed` |
+| **LED Color Theme** | Color of scene button LEDs | Default (white) |
+| **Confirm Timeout** | Seconds the active LED stays lit (0 = permanent) | `0` |
+
+Save the automation. The blueprint initializes the ZEN35 LEDs immediately on the next HA start or automation reload.
+
+> **One automation per room.** Each ZEN35 gets its own automation instance. All rooms can share the same label IDs — the area filter keeps them isolated.
+
+---
+
+## Multi-Room Setup
+
+Repeat steps 2–7 for each room. Each room gets:
+
+- Its own area
+- Its own ZEN35 device assigned to that area
+- Scene entities assigned to that area, each with the appropriate label
+- Its own automation instance pointing at the room's ZEN35
+
+The label IDs are **shared across rooms** — `powerview_scenes_open` can be applied to scenes in the living room, bedroom, and office simultaneously. The blueprint only activates entities that match both the label *and* the ZEN35's area.
+
+---
+
+## Configuration Reference
+
+### Confirm Timeout
+
+- **0 (default):** Active LED stays on until replaced by another button press. Best for rooms where you want a persistent visual indicator of shade position.
+- **1–60 seconds:** Active LED turns on for that many seconds, then turns off. The load button LED also flashes in this mode when pressed.
+
+### Button 4 / Scheduled Events
+
+Button 4 reads the `scheduledEventData` attribute from `sensor.powerview_scheduled_events` to determine whether all events in the room are currently enabled. It then calls `rest_command.powerview_set_scheduled_event` for each event to toggle them all.
+
+The blueprint identifies which scheduled events belong to the room by looking for scene entities in the area that have a `scheduledEvent_id` state attribute (set by the PowerView integration on scenes that have an associated scheduled event). If no scenes in the area have this attribute, button 4 does nothing.
+
+---
+
+## Troubleshooting
+
+**Label selector shows "Unknown item"**
+Open the dropdown and re-select the label. This is a known HA bug where stored dot-to-underscore label IDs can appear stale until re-selected.
+
+**Button press activates wrong room's scenes**
+Check that the ZEN35 device and all scene entities are assigned to the *same* area. Area assignment is the primary isolation mechanism.
+
+**Button 4 does nothing**
+1. In **Developer Tools → States**, check that `sensor.powerview_scheduled_events` exists and its attributes include a `scheduledEventData` list with entries.
+2. Confirm `rest_command.powerview_set_scheduled_event` is in `configuration.yaml` and HA has been restarted since adding it.
+3. Check that at least one scene entity in the ZEN35's area has a `scheduledEvent_id` attribute — visible in **Developer Tools → States** by clicking the scene entity.
+
+**LEDs show wrong colors after HA restart**
+The blueprint re-applies LED colors and turns button LEDs off on every HA start and automation reload. If colors look wrong, verify the `led_theme` input in the automation, then reload the automation via **Settings → Automations** → the automation's three-dot menu → **Reload**.
+
+**Scene not activating on button press**
+1. In **Developer Tools → States**, confirm the scene entity has the correct area and label assigned.
+2. In **Developer Tools → Events**, listen for `zwave_js_value_notification` and press the button to verify the event fires with `command_class_name: Central Scene`.
+3. Confirm the automation is enabled.
+
+---
+
+## Manual Hardware Checklist
 
 Run this after deploying to a real ZEN35. Open **Developer Tools → States** in a side window to watch entity state changes in real time.
 
-#### 1. Startup colors
+### 1. Startup Colors
 
 Save (or reload) the automation and check that the LEDs immediately update to your chosen theme — no button press required.
 
@@ -173,14 +279,14 @@ Save (or reload) the automation and check that the LEDs immediately update to yo
 | Default | Load ⚪, buttons 1–3 ⚪, button 4 🔴 |
 | Rainbow | Load 🩵, button 1 🔵, button 2 🟢, button 3 🟡, button 4 🔴 |
 
-#### 2. Buttons 1–3 — scene activation
+### 2. Buttons 1–3 — Scene Activation
 
 Press each button and verify:
 - The corresponding PowerView scene activates (shades move).
 - In **persistent mode**: the pressed button's LED stays lit; the others go dark.
 - In **confirm mode**: the pressed button's LED flashes briefly, then all go dark.
 
-#### 3. Button 4 — scheduled events toggle
+### 3. Button 4 — Scheduled Events Toggle
 
 | Starting state | Press | Expected LED4 |
 |----------------|-------|---------------|
@@ -189,12 +295,12 @@ Press each button and verify:
 
 In **confirm mode** the LED flashes (white = opting in, red = opting out) then goes dark regardless of the final state.
 
-#### 4. Load / dimmer button
+### 4. Load / Dimmer Button
 
-- Physical load should switch normally (this is handled by the switch hardware, not the blueprint).
+- Physical load should switch normally (handled by the switch hardware, not the blueprint).
 - **Persistent mode**: load LED follows locator behavior (on when load is off, off when load is on). No change from pressing the dimmer.
 - **Confirm mode**: load LED briefly flashes on when the dimmer is pressed, then goes dark.
 
-#### 5. Area isolation
+### 5. Area Isolation
 
 If you have two ZEN35s in different rooms, press a button on one switch and confirm that only the scenes in that switch's area activate — scenes in the other room must not move.
