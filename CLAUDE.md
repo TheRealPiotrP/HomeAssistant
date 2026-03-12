@@ -34,6 +34,12 @@ pytest -k "test_button_1_opens_scene" -v
 
 Before implementing any non-trivial change, present the plan and wait for explicit approval. Do not start writing code or modifying files until the plan is confirmed.
 
+**Match scope exactly.** "Fix stale content in a file" means edit the file — not replace or delete it. Deleting a file requires explicit instruction to delete, regardless of how outdated its content is.
+
+**Deleting files always requires explicit confirmation.** Even when a file seems redundant or fully superseded, confirm before removing it. Deletion is irreversible without git and the user may have reasons to keep it.
+
+**When asked to remove something from the repo, search all file types.** Use a broad glob (`.py`, `.yaml`, `.md`, `.toml`, etc.) and verify zero matches before declaring it clean. Do not stop after finding and fixing the obvious locations.
+
 ## Architecture
 
 ### Blueprint Structure
