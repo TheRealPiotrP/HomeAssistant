@@ -61,9 +61,44 @@ Repeat for the partially-open and closed scenes.
 
 ### 5. Add Required YAML Configuration
 
-The blueprint uses a `rest_command` to enable/disable PowerView scheduled events, and a REST sensor to read their current state. Both discover the hub automatically from the PowerView integration — no IP address needed. Add the following to your `configuration.yaml`:
+All required config lives in a single HA package file. Packages let you group related configuration — `rest_command`, `sensor`, and entity customizations — without scattering entries across `configuration.yaml`.
+
+#### 5a. Enable packages in `configuration.yaml`
+
+Add this line if it isn't already there:
 
 ```yaml
+homeassistant:
+  packages: !include_dir_named packages/
+```
+
+#### 5b. Find your scheduled event IDs
+
+Button 4 controls PowerView's scheduled events (e.g. sunrise/sunset automations). The blueprint discovers which events belong to the room via a `scheduledEvent_id` attribute on each scene entity. You need to add this attribute manually.
+
+First, find the IDs by querying your hub:
+
+```
+GET http://<hub-ip>/api/scheduledEvents
+```
+
+The response contains a `scheduledEventData` array. Each entry has an `id` field and a `sceneId` that links it to a scene. Match those scene IDs to your HA scene entities to find which ID to assign to each scene.
+
+#### 5c. Create `packages/powerview.yaml`
+
+Create the file `packages/powerview.yaml` in your HA config directory. Add a `customize` entry for every PowerView scene entity that has an associated scheduled event, using the IDs from the step above:
+
+```yaml
+homeassistant:
+  customize:
+    scene.living_room_open:
+      scheduledEvent_id: 48860
+    scene.living_room_partial:
+      scheduledEvent_id: 21095
+    scene.living_room_closed:
+      scheduledEvent_id: 56009
+    # Repeat for each room's scenes
+
 rest_command:
   powerview_set_scheduled_event:
     url: "{{ hub }}/api/scheduledEvents/{{ id }}"
@@ -84,6 +119,8 @@ sensor:
       - scheduledEventData
     scan_interval: 60
 ```
+
+Replace the scene entity IDs and scheduled event IDs with your own. Scenes without a scheduled event can be omitted — button 4 only acts on scenes that have the attribute.
 
 Restart Home Assistant after saving. No IP address configuration is required — both the `rest_command` and the sensor discover the hub automatically from the PowerView integration.
 
