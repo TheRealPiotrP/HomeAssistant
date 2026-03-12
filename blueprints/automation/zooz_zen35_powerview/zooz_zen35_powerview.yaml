@@ -178,6 +178,25 @@ action:
             data:
               parameter: 10
               value: 3
+          # Turn scene button LEDs off — we don't know which scene is active at startup.
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 2
+              value: 2
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 3
+              value: 2
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 4
+              value: 2
           - if: "{{ room_sched_ids | length > 0 }}"
             then:
               - variables:

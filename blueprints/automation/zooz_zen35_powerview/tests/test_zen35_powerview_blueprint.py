@@ -556,6 +556,9 @@ async def test_init_sets_led4_from_powerview_sensor(
 
     assert sim_zen35.get_param(device_id, ZEN35Param.LED4_MODE) == LEDState.ON, \
         "LED4 must be ON (red) when all events are disabled (opted out)"
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED1_MODE) == LEDState.OFF
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED2_MODE) == LEDState.OFF
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED3_MODE) == LEDState.OFF
 
 
 async def test_init_sets_led4_off_when_powerview_enabled(
@@ -577,5 +580,8 @@ async def test_init_sets_led4_off_when_powerview_enabled(
 
     assert sim_zen35.get_param(device_id, ZEN35Param.LED4_MODE) == LEDState.OFF, \
         "LED4 must be OFF when all events are enabled (opted in)"
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED1_MODE) == LEDState.OFF
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED2_MODE) == LEDState.OFF
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED3_MODE) == LEDState.OFF
 
 
