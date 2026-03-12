@@ -42,7 +42,6 @@ async def hass_topology(hass, mock_zwave_config_entry, sim_powerview_hub):
     - The real ``hunterdouglas_powerview`` integration is loaded against the
       SimulatedPowerViewHub, creating real scene entities. Activating them makes
       actual HTTP calls to the sim hub, which records the activation.
-    - input_boolean.living_room_blinds_central is used by button 4 (central control).
     - rest_command.powerview_set_scheduled_event makes actual HTTP PUT calls to the sim hub.
     - sensor.powerview_scheduled_events is a real REST sensor polling the hub.
     - "Noise" entities (wrong area, or no label) verify discovery is precise.
