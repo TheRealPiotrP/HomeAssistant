@@ -65,6 +65,8 @@ Three pieces of config are needed: a `rest_command` for toggling scheduled event
 
 > **Note:** HA packages (`!include_dir_named packages/`) do not reliably support `homeassistant: customize:`, `rest_command:`, or list-based `sensor:` in newer HA versions. Use direct `!include` instead.
 
+Template files for `rest_commands.yaml` and `sensors.yaml` are provided in the [`powerview/`](powerview/) directory of this blueprint — copy them directly to your HA config's `powerview/` folder.
+
 #### 5a. Wire up `configuration.yaml`
 
 Add these lines (merge with any existing `homeassistant:` block):
@@ -92,6 +94,8 @@ The response contains a `scheduledEventData` array. Each entry has an `id` and a
 
 #### 5c. Create `powerview/customize.yaml`
 
+Use [`powerview/customize.yaml`](powerview/customize.yaml) from this blueprint as a starting point. Uncomment and fill in the entries for your scene entities:
+
 ```yaml
 scene.living_room_open:
   scheduledEvent_id: 48860
@@ -102,34 +106,9 @@ scene.living_room_closed:
 # Repeat for each room's scenes
 ```
 
-#### 5d. Create `powerview/rest_commands.yaml`
+#### 5d & 5e. Copy `rest_commands.yaml` and `sensors.yaml`
 
-```yaml
-powerview_set_scheduled_event:
-  url: "{{ hub }}/api/scheduledEvents/{{ id }}"
-  method: PUT
-  content_type: application/json
-  payload: '{"scheduledEvent": {"enabled": {{ enabled }}}}'
-```
-
-#### 5e. Create `powerview/sensors.yaml`
-
-The hub URL is auto-discovered from the PowerView integration. The `availability` template keeps the sensor quiet until the integration is loaded.
-
-```yaml
-- platform: rest
-  name: "PowerView Scheduled Events"
-  unique_id: powerview_scheduled_events
-  resource_template: >-
-    {% set pv_ents = integration_entities('hunterdouglas_powerview') %}
-    {% set base = device_attr(pv_ents | first, 'configuration_url').split('/api/')[0] if pv_ents else '' %}
-    {{ base or 'http://127.0.0.1' }}/api/scheduledEvents
-  availability: "{{ integration_entities('hunterdouglas_powerview') | length > 0 }}"
-  value_template: "{{ value_json.scheduledEventData | length }}"
-  json_attributes:
-    - scheduledEventData
-  scan_interval: 60
-```
+Copy [`powerview/rest_commands.yaml`](powerview/rest_commands.yaml) and [`powerview/sensors.yaml`](powerview/sensors.yaml) from this blueprint to your HA config's `powerview/` folder unchanged — no edits needed.
 
 After saving all files, do a **full HA restart** (not Quick Reload — new integrations require a full restart to register).
 

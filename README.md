@@ -1,5 +1,7 @@
 # HomeAssistant
 
+[![Tests](https://github.com/TheRealPiotrP/HomeAssistant/actions/workflows/test.yml/badge.svg)](https://github.com/TheRealPiotrP/HomeAssistant/actions/workflows/test.yml)
+
 A collection of Home Assistant automation blueprints. Each blueprint lives in its own directory with full documentation, tests, and simulated hardware.
 
 ## Blueprints

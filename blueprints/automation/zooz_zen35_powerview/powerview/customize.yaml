@@ -1,0 +1,19 @@
+# Attach a scheduledEvent_id to each PowerView scene entity that has an
+# associated scheduled event. The blueprint reads this attribute to discover
+# which scheduled events belong to each room.
+#
+# How to find your IDs:
+#   GET http://<hub-ip>/api/scheduledEvents
+# Each entry in scheduledEventData has an "id" and a "sceneId".
+# Match sceneId values to your scene entities, then fill in the IDs below.
+#
+# Example — replace entity IDs and event IDs with your own values:
+
+# scene.living_room_open:
+#   scheduledEvent_id: 48860
+
+# scene.living_room_partial:
+#   scheduledEvent_id: 21095
+
+# scene.living_room_closed:
+#   scheduledEvent_id: 56009

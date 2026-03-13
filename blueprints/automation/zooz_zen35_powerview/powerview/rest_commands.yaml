@@ -1,0 +1,5 @@
+powerview_set_scheduled_event:
+  url: "{{ hub }}/api/scheduledEvents/{{ id }}"
+  method: PUT
+  content_type: application/json
+  payload: '{"scheduledEvent": {"enabled": {{ enabled }}}}'

@@ -1,0 +1,12 @@
+- platform: rest
+  name: "PowerView Scheduled Events"
+  unique_id: powerview_scheduled_events
+  resource_template: >-
+    {% set pv_ents = integration_entities('hunterdouglas_powerview') %}
+    {% set base = device_attr(pv_ents | first, 'configuration_url').split('/api/')[0] if pv_ents else '' %}
+    {{ base or 'http://127.0.0.1' }}/api/scheduledEvents
+  availability: "{{ integration_entities('hunterdouglas_powerview') | length > 0 }}"
+  value_template: "{{ value_json.scheduledEventData | length }}"
+  json_attributes:
+    - scheduledEventData
+  scan_interval: 60
