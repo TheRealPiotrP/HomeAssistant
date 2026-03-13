@@ -61,65 +61,77 @@ Repeat for the partially-open and closed scenes.
 
 ### 5. Add Required YAML Configuration
 
-All required config lives in a single HA package file. Packages let you group related configuration — `rest_command`, `sensor`, and entity customizations — without scattering entries across `configuration.yaml`.
+Three pieces of config are needed: a `rest_command` for toggling scheduled events, a REST sensor for reading their state, and `customize` entries to attach scheduled event IDs to scene entities. Keep them together in a `powerview/` folder under your HA config directory.
 
-#### 5a. Enable packages in `configuration.yaml`
+> **Note:** HA packages (`!include_dir_named packages/`) do not reliably support `homeassistant: customize:`, `rest_command:`, or list-based `sensor:` in newer HA versions. Use direct `!include` instead.
 
-Add this line if it isn't already there:
+#### 5a. Wire up `configuration.yaml`
+
+Add these lines (merge with any existing `homeassistant:` block):
 
 ```yaml
 homeassistant:
-  packages: !include_dir_named packages/
+  customize: !include powerview/customize.yaml
+
+rest_command: !include powerview/rest_commands.yaml
+
+sensor: !include powerview/sensors.yaml
 ```
 
 #### 5b. Find your scheduled event IDs
 
-Button 4 controls PowerView's scheduled events (e.g. sunrise/sunset automations). The blueprint discovers which events belong to the room via a `scheduledEvent_id` attribute on each scene entity. You need to add this attribute manually.
+The blueprint discovers which scheduled events belong to a room via a `scheduledEvent_id` attribute on each scene entity. You need to add this attribute manually.
 
-First, find the IDs by querying your hub:
+Query your hub to find the IDs:
 
 ```
 GET http://<hub-ip>/api/scheduledEvents
 ```
 
-The response contains a `scheduledEventData` array. Each entry has an `id` field and a `sceneId` that links it to a scene. Match those scene IDs to your HA scene entities to find which ID to assign to each scene.
+The response contains a `scheduledEventData` array. Each entry has an `id` and a `sceneId` that links it to a scene. Match those scene IDs to your HA scene entities to find which ID to assign to each.
 
-#### 5c. Create `packages/powerview.yaml`
-
-Create the file `packages/powerview.yaml` in your HA config directory. Add a `customize` entry for every PowerView scene entity that has an associated scheduled event, using the IDs from the step above:
+#### 5c. Create `powerview/customize.yaml`
 
 ```yaml
-homeassistant:
-  customize:
-    scene.living_room_open:
-      scheduledEvent_id: 48860
-    scene.living_room_partial:
-      scheduledEvent_id: 21095
-    scene.living_room_closed:
-      scheduledEvent_id: 56009
-    # Repeat for each room's scenes
-
-rest_command:
-  powerview_set_scheduled_event:
-    url: "{{ hub }}/api/scheduledEvents/{{ id }}"
-    method: PUT
-    content_type: application/json
-    payload: '{"scheduledEvent": {"enabled": {{ enabled }}}}'
-
-sensor:
-  - platform: rest
-    name: "PowerView Scheduled Events"
-    unique_id: powerview_scheduled_events
-    resource: "http://YOUR_HUB_IP/api/scheduledEvents"
-    value_template: "{{ value_json.scheduledEventData | length }}"
-    json_attributes:
-      - scheduledEventData
-    scan_interval: 60
+scene.living_room_open:
+  scheduledEvent_id: 48860
+scene.living_room_partial:
+  scheduledEvent_id: 21095
+scene.living_room_closed:
+  scheduledEvent_id: 56009
+# Repeat for each room's scenes
 ```
 
-Replace `YOUR_HUB_IP` with your PowerView hub's IP address. Replace the scene entity IDs and scheduled event IDs with your own. Scenes without a scheduled event can be omitted — button 4 only acts on scenes that have the attribute.
+#### 5d. Create `powerview/rest_commands.yaml`
 
-Restart Home Assistant after saving. The `rest_command` URL is discovered dynamically by the blueprint — only the sensor requires a hardcoded hub IP.
+```yaml
+powerview_set_scheduled_event:
+  url: "{{ hub }}/api/scheduledEvents/{{ id }}"
+  method: PUT
+  content_type: application/json
+  payload: '{"scheduledEvent": {"enabled": {{ enabled }}}}'
+```
+
+#### 5e. Create `powerview/sensors.yaml`
+
+The hub URL is auto-discovered from the PowerView integration. The `availability` template keeps the sensor quiet until the integration is loaded.
+
+```yaml
+- platform: rest
+  name: "PowerView Scheduled Events"
+  unique_id: powerview_scheduled_events
+  resource_template: >-
+    {% set pv_ents = integration_entities('hunterdouglas_powerview') %}
+    {% set base = device_attr(pv_ents | first, 'configuration_url').split('/api/')[0] if pv_ents else '' %}
+    {{ base or 'http://127.0.0.1' }}/api/scheduledEvents
+  availability: "{{ integration_entities('hunterdouglas_powerview') | length > 0 }}"
+  value_template: "{{ value_json.scheduledEventData | length }}"
+  json_attributes:
+    - scheduledEventData
+  scan_interval: 60
+```
+
+After saving all files, do a **full HA restart** (not Quick Reload — new integrations require a full restart to register).
 
 ### 6. Install the Blueprint
 
