@@ -180,7 +180,7 @@ The label IDs are **shared across rooms** — `powerview_scenes_open` can be app
 ```
 ┌─────────────────────┐     ┌─────────────────────┐
 │   dimmer  (load)    │     │   dimmer  (load)    │
-│         ⚪          │     │         🩵          │
+│         ⚪          │     │         🩷          │
 ├──────────┬──────────┤     ├──────────┬──────────┤
 │   ⚪  1  │   ⚪  2  │     │   🔵  1  │   🟢  2  │
 ├──────────┼──────────┤     ├──────────┼──────────┤
@@ -192,7 +192,7 @@ The label IDs are **shared across rooms** — `powerview_scenes_open` can be app
 | | Load | Button 1 | Button 2 | Button 3 | Button 4 |
 |-|------|----------|----------|----------|----------|
 | **Default** | ⚪ white | ⚪ white | ⚪ white | ⚪ white | 🔴 red |
-| **Rainbow** | 🩵 cyan | 🔵 blue | 🟢 green | 🟡 yellow | 🔴 red |
+| **Rainbow** | 🩷 pink | 🔵 blue | 🟢 green | 🟡 yellow | 🔴 red |
 
 Colors are applied on HA startup and whenever the automation is saved. Button 4 is always red regardless of theme.
 
@@ -299,7 +299,7 @@ Save (or reload) the automation and check that the LEDs immediately update to yo
 | Theme | Expected |
 |-------|----------|
 | Default | Load ⚪, buttons 1–3 ⚪, button 4 🔴 |
-| Rainbow | Load 🩵, button 1 🔵, button 2 🟢, button 3 🟡, button 4 🔴 |
+| Rainbow | Load 🩷, button 1 🔵, button 2 🟢, button 3 🟡, button 4 🔴 |
 
 ### 2. Buttons 1–3 — Scene Activation
 

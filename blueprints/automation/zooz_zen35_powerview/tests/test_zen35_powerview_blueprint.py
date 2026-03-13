@@ -8,6 +8,9 @@ runs a real HTTP server so the real ``hunterdouglas_powerview`` integration,
 tests assert on hub state (scene activations, scheduled event toggles) directly.
 """
 import pytest
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import CoreState
+from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 
 from .conftest import LEDColor, LEDState, ZEN35Param
@@ -115,7 +118,7 @@ async def test_scene_button_activates_scene_and_sets_leds(
         (
             "rainbow",
             {
-                ZEN35Param.LOAD_COLOR: LEDColor.CYAN,
+                ZEN35Param.LOAD_COLOR: LEDColor.MAGENTA,
                 ZEN35Param.LED1_COLOR: LEDColor.BLUE,
                 ZEN35Param.LED2_COLOR: LEDColor.GREEN,
                 ZEN35Param.LED3_COLOR: LEDColor.YELLOW,
@@ -585,3 +588,123 @@ async def test_init_sets_led4_off_when_powerview_enabled(
     assert sim_zen35.get_param(device_id, ZEN35Param.LED3_MODE) == LEDState.OFF
 
 
+# ---------------------------------------------------------------------------
+# homeassistant.start trigger
+# ---------------------------------------------------------------------------
+
+async def test_init_triggered_by_homeassistant_start(
+    hass,
+    hass_topology,
+    load_blueprint,
+    sim_zen35,
+):
+    """homeassistant.start trigger initializes LEDs when HA finishes starting up.
+
+    The homeassistant.start trigger only fires when home_assistant_start=True, which
+    HA sets only when automations are loaded while HA is still starting (CoreState.not_running).
+    We simulate this by briefly setting hass._state to not_running before loading the
+    automation, so the automation registers a listen_once for EVENT_HOMEASSISTANT_STARTED
+    instead of attaching triggers immediately. When we fire EVENT_HOMEASSISTANT_STARTED,
+    the triggers attach with home_assistant_start=True and the init branch runs.
+    """
+    topology = hass_topology
+    device_id = topology.zen35_device.id
+
+    # Simulate HA not yet running — automation will defer trigger attachment
+    hass.state = CoreState.not_running
+    await load_blueprint(topology.zen35_device, topology.labels)
+    hass.state = CoreState.running
+
+    # No params should be set yet — init hasn't run (homeassistant.start hasn't fired)
+    assert sim_zen35.total_calls == 0, \
+        "Init must not run before EVENT_HOMEASSISTANT_STARTED when loaded during startup"
+
+    # HA finishes starting → automation attaches triggers with home_assistant_start=True
+    # → homeassistant.start trigger fires → init branch runs
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    await hass.async_block_till_done()
+
+    expected = {
+        ZEN35Param.LOAD_COLOR: LEDColor.WHITE,
+        ZEN35Param.LED1_COLOR: LEDColor.WHITE,
+        ZEN35Param.LED2_COLOR: LEDColor.WHITE,
+        ZEN35Param.LED3_COLOR: LEDColor.WHITE,
+        ZEN35Param.LED4_COLOR: LEDColor.RED,
+        ZEN35Param.LED1_MODE: LEDState.OFF,
+        ZEN35Param.LED2_MODE: LEDState.OFF,
+        ZEN35Param.LED3_MODE: LEDState.OFF,
+    }
+    for param, value in expected.items():
+        got = sim_zen35.get_param(device_id, param)
+        assert got == value, f"homeassistant.start: param {param} expected {value}, got {got}"
+
+
+# ---------------------------------------------------------------------------
+# Button 4 edge cases
+# ---------------------------------------------------------------------------
+
+async def test_button4_does_nothing_when_no_scheduled_event_ids(
+    hass,
+    hass_topology,
+    load_blueprint,
+    sim_zen35,
+    sim_powerview_hub,
+):
+    """Button 4 is a no-op when no scene in the area has a scheduledEvent_id attribute."""
+    topology = hass_topology
+    device_id = topology.zen35_device.id
+
+    # Strip scheduledEvent_id from all area scenes so room_sched_ids resolves to []
+    for entity_id in (
+        topology.entities.scene_open,
+        topology.entities.scene_partial,
+        topology.entities.scene_closed,
+    ):
+        state = hass.states.get(entity_id)
+        stripped = {k: v for k, v in state.attributes.items() if k != "scheduledEvent_id"}
+        hass.states.async_set(entity_id, state.state, stripped)
+
+    await load_blueprint(topology.zen35_device, topology.labels)
+
+    _fire_button(hass, device_id, "Scene 004")
+    await hass.async_block_till_done()
+
+    assert sim_zen35.total_calls == 0, \
+        "No LED calls expected when no scheduled event IDs exist in the area"
+    for event_id in (48860, 21095, 56009):
+        assert sim_powerview_hub.get_event(event_id)["enabled"] is True, \
+            f"event {event_id}: must remain unchanged when button 4 is a no-op"
+
+
+async def test_button4_does_nothing_when_powerview_not_integrated(
+    hass,
+    mock_zwave_config_entry,
+    load_blueprint,
+    sim_zen35,
+):
+    """Button 4 is a no-op when the PowerView integration is not loaded (hub_url is empty).
+
+    Without hunterdouglas_powerview loaded, integration_entities() returns [] and
+    hub_url resolves to '', so room_sched_ids is [] and button 4's condition fails.
+    """
+    from types import SimpleNamespace
+
+    area_reg = ar.async_get(hass)
+    dev_reg = dr.async_get(hass)
+
+    area = area_reg.async_create("No PV Room")
+    device = dev_reg.async_get_or_create(
+        config_entry_id=mock_zwave_config_entry.entry_id,
+        identifiers={("zwave_js", "zen35-no-pv")},
+        name="ZEN35 No PV",
+    )
+    device = dev_reg.async_update_device(device.id, area_id=area.id)
+
+    labels = SimpleNamespace(open="dummy_open", partial="dummy_partial", closed="dummy_closed")
+    await load_blueprint(device, labels)
+
+    _fire_button(hass, device.id, "Scene 004")
+    await hass.async_block_till_done()
+
+    assert sim_zen35.total_calls == 0, \
+        "Button 4 must not change any LED when PowerView integration is not loaded"
