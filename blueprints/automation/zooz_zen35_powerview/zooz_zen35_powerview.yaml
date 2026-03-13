@@ -103,8 +103,8 @@ trigger:
 
 action:
   - variables:
-      scene_id: "{{ trigger.event.data.label | default('') }}"
-      scene_value: "{{ trigger.event.data.value | default('') }}"
+      scene_id: "{{ trigger.event.data.label if trigger.platform == 'event' else '' }}"
+      scene_value: "{{ trigger.event.data.value if trigger.platform == 'event' else '' }}"
       area_id: "{{ device_attr(device_id, 'area_id') }}"
       # Entities in this area with each label (only when area exists)
       entities_fully_open: >
