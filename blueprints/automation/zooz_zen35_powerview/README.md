@@ -110,19 +110,16 @@ sensor:
   - platform: rest
     name: "PowerView Scheduled Events"
     unique_id: powerview_scheduled_events
-    resource_template: >-
-      {% set pv_ents = integration_entities('hunterdouglas_powerview') %}
-      {% set cfg = device_attr(pv_ents | first, 'configuration_url') | default('') %}
-      {{ cfg.split('/api/')[0] }}/api/scheduledEvents
+    resource: "http://YOUR_HUB_IP/api/scheduledEvents"
     value_template: "{{ value_json.scheduledEventData | length }}"
     json_attributes:
       - scheduledEventData
     scan_interval: 60
 ```
 
-Replace the scene entity IDs and scheduled event IDs with your own. Scenes without a scheduled event can be omitted — button 4 only acts on scenes that have the attribute.
+Replace `YOUR_HUB_IP` with your PowerView hub's IP address. Replace the scene entity IDs and scheduled event IDs with your own. Scenes without a scheduled event can be omitted — button 4 only acts on scenes that have the attribute.
 
-Restart Home Assistant after saving. No IP address configuration is required — both the `rest_command` and the sensor discover the hub automatically from the PowerView integration.
+Restart Home Assistant after saving. The `rest_command` URL is discovered dynamically by the blueprint — only the sensor requires a hardcoded hub IP.
 
 ### 6. Install the Blueprint
 
