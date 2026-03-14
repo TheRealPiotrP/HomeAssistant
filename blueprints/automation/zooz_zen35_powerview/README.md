@@ -1,5 +1,7 @@
 # ZEN35 → PowerView Blueprint
 
+> Z-Wave parameter reference: [ZEN35_PARAMETERS.md](ZEN35_PARAMETERS.md)
+
 Automatically map Zooz ZEN35 switches to Hunter Douglas PowerView blind scenes using **areas + labels**. No per-room entity selection needed.
 
 | Button | Action |
