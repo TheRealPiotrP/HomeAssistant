@@ -358,6 +358,10 @@ async def test_scene_button_confirm_mode_led_turns_off_after_timeout(
 
     assert sim_zen35.get_param(device_id, active_color_param) == LEDColor.WHITE
 
+    # LED4 must be turned off (cancels any lingering button 4 confirm flash)
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED4_MODE) == LEDState.OFF, \
+        f"{button_id}: LED4 must be turned off in confirm mode"
+
 
 @pytest.mark.parametrize(
     "initial_all_enabled, expected_led4_color",
@@ -423,6 +427,10 @@ async def test_load_button_confirm_mode_led_turns_on_then_off(
         LEDState.ON, LEDState.OFF
     ], "load LED must go ON then OFF in confirm mode"
 
+    # Load button must also cancel any lingering button 4 confirm flash
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED4_MODE) == LEDState.OFF, \
+        "load button must turn LED4 off in confirm mode"
+
 
 async def test_rapid_double_press_not_dropped(
     hass,
@@ -454,6 +462,34 @@ async def test_rapid_double_press_not_dropped(
     # LED4 ends dark after the second run's confirm timeout
     assert sim_zen35.param_history(device_id, ZEN35Param.LED4_MODE)[-1] == LEDState.OFF, \
         "LED4 must be OFF after the second run's confirm timeout"
+
+
+async def test_scene_button_cancels_button4_confirm_flash(
+    hass,
+    hass_topology,
+    load_blueprint,
+    sim_zen35,
+    sim_powerview_hub,
+):
+    """Pressing a scene button while button 4's confirm delay is running must turn LED4 off.
+
+    With mode: restart, the scene button press cancels button 4's run mid-delay,
+    so the LED4-off call at the end of button 4's sequence never executes.
+    The scene button must explicitly turn LED4 off to avoid it staying red indefinitely.
+    """
+    topology = hass_topology
+    device_id = topology.zen35_device.id
+    await load_blueprint(topology.zen35_device, topology.labels, confirm_timeout=0.001)
+
+    # Button 4 starts its confirm sequence (opts out → red on, delay starts)
+    _fire_button(hass, device_id, "Scene 004")
+    # Immediately fire a scene button — mode: restart cancels button 4's delay
+    _fire_button(hass, device_id, "Scene 001")
+    await hass.async_block_till_done()
+
+    # Scene button must have cancelled button 4's delay and turned LED4 off
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED4_MODE) == LEDState.OFF, \
+        "LED4 must be OFF after scene button cancels button 4's confirm delay"
 
 
 async def test_load_button_persistent_mode_no_led_change(

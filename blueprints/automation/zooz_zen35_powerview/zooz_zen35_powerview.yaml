@@ -252,6 +252,12 @@ action:
               value: 2
           - if: "{{ confirm_timeout > 0 }}"
             then:
+              - service: zwave_js.set_config_parameter
+                target:
+                  device_id: "{{ device_id }}"
+                data:
+                  parameter: 5
+                  value: 2
               - delay:
                   seconds: "{{ confirm_timeout }}"
               - service: zwave_js.set_config_parameter
@@ -296,6 +302,12 @@ action:
               value: 2
           - if: "{{ confirm_timeout > 0 }}"
             then:
+              - service: zwave_js.set_config_parameter
+                target:
+                  device_id: "{{ device_id }}"
+                data:
+                  parameter: 5
+                  value: 2
               - delay:
                   seconds: "{{ confirm_timeout }}"
               - service: zwave_js.set_config_parameter
@@ -340,6 +352,12 @@ action:
               value: 3
           - if: "{{ confirm_timeout > 0 }}"
             then:
+              - service: zwave_js.set_config_parameter
+                target:
+                  device_id: "{{ device_id }}"
+                data:
+                  parameter: 5
+                  value: 2
               - delay:
                   seconds: "{{ confirm_timeout }}"
               - service: zwave_js.set_config_parameter
@@ -355,6 +373,12 @@ action:
           - "{{ scene_value == 'KeyPressed' }}"
           - "{{ confirm_timeout > 0 }}"
         sequence:
+          - service: zwave_js.set_config_parameter
+            target:
+              device_id: "{{ device_id }}"
+            data:
+              parameter: 5
+              value: 2
           - service: zwave_js.set_config_parameter
             target:
               device_id: "{{ device_id }}"
