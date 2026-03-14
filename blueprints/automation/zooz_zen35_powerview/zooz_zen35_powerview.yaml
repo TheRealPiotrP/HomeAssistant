@@ -214,7 +214,7 @@ action:
                   device_id: "{{ device_id }}"
                 data:
                   parameter: 5
-                  value: "{{ 2 if init_opted_in else 3 }}"
+                  value: "{{ 2 if (confirm_timeout > 0 or init_opted_in) else 3 }}"
 
 
       # Button 1 (Scene 001) – Fully open

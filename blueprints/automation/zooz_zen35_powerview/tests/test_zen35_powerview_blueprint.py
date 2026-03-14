@@ -624,6 +624,38 @@ async def test_init_sets_led4_off_when_powerview_enabled(
     assert sim_zen35.get_param(device_id, ZEN35Param.LED3_MODE) == LEDState.OFF
 
 
+async def test_init_led4_always_off_in_confirm_mode(
+    hass,
+    hass_topology,
+    load_blueprint,
+    sim_zen35,
+    sim_powerview_hub,
+):
+    """In confirm mode, LED4 is always OFF after init regardless of scheduled event state.
+
+    In persistent mode, LED4 reflects opted-out state (ON = red). In confirm mode,
+    there is no persistent LED state, so LED4 must always start dark after a restart.
+    """
+    topology = hass_topology
+    device_id = topology.zen35_device.id
+
+    # Seed hub with all events disabled (opted out) — in persistent mode this would
+    # cause LED4 to be set ON (red), but in confirm mode it must stay OFF.
+    sim_powerview_hub.seed_events([
+        {"id": 48860, "enabled": False, "sceneId": 36156},
+        {"id": 21095, "enabled": False, "sceneId": 16652},
+        {"id": 56009, "enabled": False, "sceneId": 46041},
+    ])
+
+    await load_blueprint(topology.zen35_device, topology.labels, confirm_timeout=0.001)
+
+    hass.bus.async_fire("automation_reloaded")
+    await hass.async_block_till_done()
+
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED4_MODE) == LEDState.OFF, \
+        "LED4 must be OFF after init in confirm mode, even when events are disabled"
+
+
 # ---------------------------------------------------------------------------
 # homeassistant.start trigger
 # ---------------------------------------------------------------------------
