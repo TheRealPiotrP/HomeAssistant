@@ -181,7 +181,7 @@ The load LED uses its default HA behavior (on when load is off, off when load is
 
 ### LED Behavior
 
-**Persistent mode** (`confirm_timeout = 0`, default) — the active LED stays lit until a different button is pressed.
+**Default persistent mode** (`confirm_timeout = 0`, default theme) — the active LED stays lit until a different button is pressed; others go dark.
 
 **Example — scene 2 active, scheduled events disabled:**
 ```
@@ -207,7 +207,21 @@ The load LED uses its default HA behavior (on when load is off, off when load is
 └──────────┴──────────┘
 ```
 
-**Confirm mode** (`confirm_timeout > 0`) — the active LED lights up briefly, then turns off. Button 4 blinks white when opting in, red when opting out.
+**Rainbow persistent mode** (`confirm_timeout = 0`, rainbow theme) — all scene LEDs (1–3) stay ON continuously in their rainbow colors regardless of which button was last pressed. Button 4 still toggles red/dark to reflect scheduled-event state.
+
+**Example — any scene button pressed, scheduled events enabled:**
+```
+┌─────────────────────┐
+│   dimmer  (load)    │
+│         🩷          │
+├──────────┬──────────┤
+│   🔵  1  │   🟢  2  │  ← all always ON
+├──────────┼──────────┤
+│   🟡  3  │   ⬛  4  │  ← opted in
+└──────────┴──────────┘
+```
+
+**Confirm mode** (`confirm_timeout > 0`, either theme) — the active LED lights up briefly, then turns off. Button 4 blinks white when opting in, red when opting out.
 
 **Immediately after pressing button 2:**
 ```

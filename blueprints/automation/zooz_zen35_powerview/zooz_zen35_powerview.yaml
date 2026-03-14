@@ -121,6 +121,8 @@ action:
       led_color_b1: "{{ 1 if led_theme == 'rainbow' else 0 }}"
       led_color_b2: "{{ 2 if led_theme == 'rainbow' else 0 }}"
       led_color_b3: "{{ 5 if led_theme == 'rainbow' else 0 }}"
+      # In rainbow persistent mode all scene LEDs stay ON continuously.
+      rainbow_persistent: "{{ led_theme == 'rainbow' and confirm_timeout == 0 }}"
       # PowerView hub base URL — auto-discovered from the hunterdouglas_powerview integration.
       # Empty string when the integration is not loaded.
       hub_url: >
@@ -180,25 +182,25 @@ action:
             data:
               parameter: 10
               value: 3
-          # Turn scene button LEDs off — we don't know which scene is active at startup.
+          # In rainbow persistent mode, start all scene LEDs ON; otherwise OFF.
           - service: zwave_js.set_config_parameter
             target:
               device_id: "{{ device_id }}"
             data:
               parameter: 2
-              value: 2
+              value: "{{ 3 if rainbow_persistent else 2 }}"
           - service: zwave_js.set_config_parameter
             target:
               device_id: "{{ device_id }}"
             data:
               parameter: 3
-              value: 2
+              value: "{{ 3 if rainbow_persistent else 2 }}"
           - service: zwave_js.set_config_parameter
             target:
               device_id: "{{ device_id }}"
             data:
               parameter: 4
-              value: 2
+              value: "{{ 3 if rainbow_persistent else 2 }}"
           - if: "{{ room_sched_ids | length > 0 }}"
             then:
               - variables:
@@ -243,13 +245,13 @@ action:
               device_id: "{{ device_id }}"
             data:
               parameter: 3
-              value: 2
+              value: "{{ 3 if rainbow_persistent else 2 }}"
           - service: zwave_js.set_config_parameter
             target:
               device_id: "{{ device_id }}"
             data:
               parameter: 4
-              value: 2
+              value: "{{ 3 if rainbow_persistent else 2 }}"
           - if: "{{ confirm_timeout > 0 }}"
             then:
               - service: zwave_js.set_config_parameter
@@ -287,7 +289,7 @@ action:
               device_id: "{{ device_id }}"
             data:
               parameter: 2
-              value: 2
+              value: "{{ 3 if rainbow_persistent else 2 }}"
           - service: zwave_js.set_config_parameter
             target:
               device_id: "{{ device_id }}"
@@ -299,7 +301,7 @@ action:
               device_id: "{{ device_id }}"
             data:
               parameter: 4
-              value: 2
+              value: "{{ 3 if rainbow_persistent else 2 }}"
           - if: "{{ confirm_timeout > 0 }}"
             then:
               - service: zwave_js.set_config_parameter
@@ -337,13 +339,13 @@ action:
               device_id: "{{ device_id }}"
             data:
               parameter: 2
-              value: 2
+              value: "{{ 3 if rainbow_persistent else 2 }}"
           - service: zwave_js.set_config_parameter
             target:
               device_id: "{{ device_id }}"
             data:
               parameter: 3
-              value: 2
+              value: "{{ 3 if rainbow_persistent else 2 }}"
           - service: zwave_js.set_config_parameter
             target:
               device_id: "{{ device_id }}"
@@ -422,19 +424,19 @@ action:
               device_id: "{{ device_id }}"
             data:
               parameter: 2
-              value: 2
+              value: "{{ 3 if rainbow_persistent else 2 }}"
           - service: zwave_js.set_config_parameter
             target:
               device_id: "{{ device_id }}"
             data:
               parameter: 3
-              value: 2
+              value: "{{ 3 if rainbow_persistent else 2 }}"
           - service: zwave_js.set_config_parameter
             target:
               device_id: "{{ device_id }}"
             data:
               parameter: 4
-              value: 2
+              value: "{{ 3 if rainbow_persistent else 2 }}"
           # In confirm mode, blink white when opting in; otherwise use red theme color
           - service: zwave_js.set_config_parameter
             target:

@@ -776,3 +776,105 @@ async def test_button4_does_nothing_when_powerview_not_integrated(
 
     assert sim_zen35.total_calls == 0, \
         "Button 4 must not change any LED when PowerView integration is not loaded"
+
+
+# ---------------------------------------------------------------------------
+# Rainbow persistent mode — all scene LEDs stay ON
+# ---------------------------------------------------------------------------
+
+async def test_rainbow_persistent_init_leds_all_on(
+    hass,
+    hass_topology,
+    load_blueprint,
+    sim_zen35,
+):
+    """In rainbow+persistent mode, init sets LED1–3 to ON (not OFF)."""
+    topology = hass_topology
+    device_id = topology.zen35_device.id
+
+    await load_blueprint(topology.zen35_device, topology.labels, led_theme="rainbow")
+
+    hass.bus.async_fire("automation_reloaded")
+    await hass.async_block_till_done()
+
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED1_MODE) == LEDState.ON
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED2_MODE) == LEDState.ON
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED3_MODE) == LEDState.ON
+
+
+@pytest.mark.parametrize(
+    "button_id, active_param, others",
+    [
+        ("Scene 001", ZEN35Param.LED1_MODE, [ZEN35Param.LED2_MODE, ZEN35Param.LED3_MODE]),
+        ("Scene 002", ZEN35Param.LED2_MODE, [ZEN35Param.LED1_MODE, ZEN35Param.LED3_MODE]),
+        ("Scene 003", ZEN35Param.LED3_MODE, [ZEN35Param.LED1_MODE, ZEN35Param.LED2_MODE]),
+    ],
+    ids=["button1-rainbow-persistent", "button2-rainbow-persistent", "button3-rainbow-persistent"],
+)
+async def test_rainbow_persistent_button_keeps_all_leds_on(
+    hass,
+    hass_topology,
+    load_blueprint,
+    sim_zen35,
+    sim_powerview_hub,
+    button_id,
+    active_param,
+    others,
+):
+    """In rainbow+persistent mode, pressing a scene button leaves all LEDs ON."""
+    topology = hass_topology
+    device_id = topology.zen35_device.id
+
+    await load_blueprint(topology.zen35_device, topology.labels, led_theme="rainbow")
+
+    _fire_button(hass, device_id, button_id)
+    await hass.async_block_till_done()
+
+    assert sim_zen35.get_param(device_id, active_param) == LEDState.ON
+    for param in others:
+        assert sim_zen35.get_param(device_id, param) == LEDState.ON, \
+            f"{button_id}: param {param} should stay ON in rainbow persistent mode"
+
+
+async def test_rainbow_persistent_button4_keeps_scene_leds_on(
+    hass,
+    hass_topology,
+    load_blueprint,
+    sim_zen35,
+    sim_powerview_hub,
+):
+    """In rainbow+persistent mode, button 4 leaves LED1–3 ON after toggling events."""
+    topology = hass_topology
+    device_id = topology.zen35_device.id
+
+    await load_blueprint(topology.zen35_device, topology.labels, led_theme="rainbow")
+
+    _fire_button(hass, device_id, "Scene 004")
+    await hass.async_block_till_done()
+
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED1_MODE) == LEDState.ON
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED2_MODE) == LEDState.ON
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED3_MODE) == LEDState.ON
+
+
+async def test_rainbow_confirm_mode_leds_still_blink_and_off(
+    hass,
+    hass_topology,
+    load_blueprint,
+    sim_zen35,
+    sim_powerview_hub,
+):
+    """Rainbow+confirm mode: pressed LED blinks briefly then turns off (unchanged behavior)."""
+    topology = hass_topology
+    device_id = topology.zen35_device.id
+
+    await load_blueprint(
+        topology.zen35_device, topology.labels,
+        led_theme="rainbow", confirm_timeout=0.001,
+    )
+
+    _fire_button(hass, device_id, "Scene 001")
+    await hass.async_block_till_done()
+
+    # After timeout, LED1 should be OFF (confirm mode, not persistent)
+    assert sim_zen35.get_param(device_id, ZEN35Param.LED1_MODE) == LEDState.OFF
