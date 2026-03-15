@@ -204,6 +204,7 @@ async def test_scene_with_right_label_but_wrong_area_is_not_activated(
     kitchen_scene_id,
 ):
     """Scene with matching label in a different area than the device must not activate."""
+    _ = sim_zen35
     topology = hass_topology
 
     dr.async_get(hass).async_update_device(
@@ -477,6 +478,7 @@ async def test_scene_button_cancels_button4_confirm_flash(
     so the LED4-off call at the end of button 4's sequence never executes.
     The scene button must explicitly turn LED4 off to avoid it staying red indefinitely.
     """
+    _ = sim_powerview_hub
     topology = hass_topology
     device_id = topology.zen35_device.id
     await load_blueprint(topology.zen35_device, topology.labels, confirm_timeout=0.001)
@@ -608,6 +610,7 @@ async def test_init_sets_led4_off_when_powerview_enabled(
     sim_powerview_hub,
 ):
     """On automation_reloaded with PowerView hub, LED4 is OFF when all events are enabled."""
+    _ = sim_powerview_hub
     topology = hass_topology
     device_id = topology.zen35_device.id
     # Topology seeds hub with all enabled; REST sensor polled during topology setup.
@@ -822,6 +825,7 @@ async def test_rainbow_persistent_button_keeps_all_leds_on(
     others,
 ):
     """In rainbow+persistent mode, pressing a scene button leaves all LEDs ON."""
+    _ = sim_powerview_hub
     topology = hass_topology
     device_id = topology.zen35_device.id
 
@@ -844,6 +848,7 @@ async def test_rainbow_persistent_button4_keeps_scene_leds_on(
     sim_powerview_hub,
 ):
     """In rainbow+persistent mode, button 4 leaves LED1–3 ON after toggling events."""
+    _ = sim_powerview_hub
     topology = hass_topology
     device_id = topology.zen35_device.id
 
@@ -865,6 +870,7 @@ async def test_rainbow_confirm_mode_leds_still_blink_and_off(
     sim_powerview_hub,
 ):
     """Rainbow+confirm mode: pressed LED blinks briefly then turns off (unchanged behavior)."""
+    _ = sim_powerview_hub
     topology = hass_topology
     device_id = topology.zen35_device.id
 

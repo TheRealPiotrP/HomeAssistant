@@ -1,5 +1,6 @@
 """Local fixtures for the ZEN35 PowerView blueprint tests."""
 import shutil
+from collections.abc import AsyncGenerator, Generator
 from enum import IntEnum
 from pathlib import Path
 
@@ -47,6 +48,7 @@ BLUEPRINT_PATH = "zooz_zen35_powerview/zooz_zen35_powerview.yaml"
 
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations):
+    _ = enable_custom_integrations
     yield
 
 
@@ -64,7 +66,7 @@ def copy_blueprint_to_config(hass):
 
 
 @pytest.fixture
-def mock_zwave_config_entry(hass) -> ConfigEntry:
+def mock_zwave_config_entry(hass) -> Generator[ConfigEntry]:
     entry = ConfigEntry(
         version=1,
         domain="zwave_js",
@@ -93,9 +95,10 @@ def sim_zen35(hass) -> SimulatedZEN35:
 
 
 @pytest.fixture
-async def sim_powerview_hub(socket_enabled) -> SimulatedPowerViewHub:
+async def sim_powerview_hub(socket_enabled) -> AsyncGenerator[SimulatedPowerViewHub]:
     """Simulated PowerView hub HTTP server on 127.0.0.1 (allowed by pytest-socket).
     Seeds initial state with all events enabled (opted in)."""
+    _ = socket_enabled
     hub = SimulatedPowerViewHub()
     await hub.start()
     yield hub
@@ -105,6 +108,7 @@ async def sim_powerview_hub(socket_enabled) -> SimulatedPowerViewHub:
 @pytest.fixture
 def load_blueprint(hass, copy_blueprint_to_config, sim_powerview_hub):
     """Load the blueprint into HA. Accepts a Labels namedtuple from hass_topology."""
+    _ = copy_blueprint_to_config
 
     async def _load(
         device,
